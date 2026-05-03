@@ -275,7 +275,16 @@ module RV32IM72F8SPSoCTOP #(
                    (MMIO_data_memory_address[31:16] == 16'h1002) &&
                    (MMIO_data_memory_address[15:0] < 16'h0960);
     wire [11:0] vram_waddr = MMIO_data_memory_address[11:0];
-    wire [7:0]  vram_wdata = MMIO_data_memory_write_data[7:0];
+    // VRAM 바이트 레인 선택 (ByteEnableLogic이 sb 시 바이트를 시프트하므로)
+    reg [7:0] vram_wdata_sel;
+    always @(*) begin
+        case (MMIO_data_memory_address[1:0])
+            2'b00: vram_wdata_sel = MMIO_data_memory_write_data[7:0];
+            2'b01: vram_wdata_sel = MMIO_data_memory_write_data[15:8];
+            2'b10: vram_wdata_sel = MMIO_data_memory_write_data[23:16];
+            2'b11: vram_wdata_sel = MMIO_data_memory_write_data[31:24];
+        endcase
+    end
 
     // KB acknowledge: 0x1003_0004 쓰기
     assign kb_ack = MMIO_data_memory_write_enable &&
@@ -315,7 +324,7 @@ module RV32IM72F8SPSoCTOP #(
         .clk_a   (sys_clk),
         .we_a    (vram_we),
         .addr_a  (vram_waddr),
-        .din_a   (vram_wdata),
+        .din_a   (vram_wdata_sel),
 
         // Port B — VGA read (25 MHz)
         .clk_b   (pixel_clk),
