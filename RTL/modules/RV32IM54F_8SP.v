@@ -11,6 +11,7 @@ module RV32IM54F8SP #(
     input reset,
     input UART_busy,
     input timer_interrupt_pending,
+    input [XLEN-1:0] MMIO_read_data,
 
      // IO Interface
     
@@ -365,16 +366,19 @@ module RV32IM54F8SP #(
     assign MMIO_data_memory_address = MEM_alu_result;
 
     // MMIO Interface logics
-    reg mmio_uart_status_hit_reg;
+    reg mmio_hit_reg;
     always @(posedge clk or posedge reset) begin
         if (reset)
-            mmio_uart_status_hit_reg <= 1'b0;
+            mmio_hit_reg <= 1'b0;
         else if (clk_enable && !EX_MEM_stall)
-            mmio_uart_status_hit_reg <= (EX2_alu_result == 32'h1001_0004);
+            mmio_hit_reg <= (EX2_alu_result[31:24] == 8'h02) ||
+                            (EX2_alu_result[31:16] == 16'h1001) ||
+                            (EX2_alu_result[31:16] == 16'h1002) ||
+                            (EX2_alu_result[31:16] == 16'h1003);
         end
 
     wire [XLEN-1:0] data_memory_read_data_muxed;
-    assign data_memory_read_data_muxed = mmio_uart_status_hit_reg ? {31'b0, UART_busy} : data_memory_read_data;
+    assign data_memory_read_data_muxed = mmio_hit_reg ? mmio_read_data : data_memory_read_data;
 
     // =========================================================================
     // EXR stage combinational logic: ALU source selection + forwarding
@@ -589,7 +593,7 @@ module RV32IM54F8SP #(
         .clk(clk),
         .clk_enable(clk_enable),
         .read_stall(EX_MEM_stall),
-        .write_enable(MEM_memory_write && !mmio_uart_status_hit_reg),
+        .write_enable(MEM_memory_write && !mmio_hit_reg),
         .address(data_memory_address),
         .write_data(data_memory_write_data),
         .write_mask(write_mask),
