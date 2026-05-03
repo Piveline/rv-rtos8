@@ -3,13 +3,16 @@
 `include "./alu_op.vh"
 `include "./opcode.vh"
 
-module RV32IM72F8SP #(
+module RV32IM54F8SP #(
     parameter XLEN = 32
 )(
     input clk,
     input clk_enable,
     input reset,
     input UART_busy,
+    input timer_interrupt_pending,
+
+     // IO Interface
     
     output wire [31:0] retire_instruction,
     output wire [XLEN-1:0] MMIO_data_memory_write_data,
@@ -102,7 +105,7 @@ module RV32IM72F8SP #(
 
     // Exception_Detector
     wire trapped;
-    wire [2:0] trap_status;
+    wire [3:0] trap_status;
 
     // Trap Controller
     wire trap_done;
@@ -451,9 +454,12 @@ module RV32IM72F8SP #(
                                (IO_csr_address == 12'hF14) ||
                                (IO_csr_address == 12'h300) ||
                                (IO_csr_address == 12'h301) ||
+                               (IO_csr_address == 12'h304) ||
                                (IO_csr_address == 12'h305) ||
+                               (IO_csr_address == 12'h340) ||
                                (IO_csr_address == 12'h341) ||
-                               (IO_csr_address == 12'h342);
+                               (IO_csr_address == 12'h342) ||
+                               (IO_csr_address == 12'h344);
 
     // =========================================================================
     // Module Instantiations
@@ -565,9 +571,13 @@ module RV32IM72F8SP #(
         .csr_write_data(csr_write_data),
         .instruction_retired(instruction_retired),
         .valid_csr_address(trapped ? 1'b1 : ID_valid_csr_address),
+        .mret_executed(mret_executed),
+        .timer_interrupt_pending(timer_interrupt_pending),
 
         .csr_read_out(csr_read_out),
-        .csr_ready(csr_ready)
+        .csr_ready(csr_ready),
+        .mstatus_mie(mstatus_mie),
+        .mie_mtie(mie_mtie)
     );
 
     wire [XLEN-1:0] data_memory_address;
@@ -597,18 +607,18 @@ module RV32IM72F8SP #(
         .ID_funct3(funct3),
         .EXR_opcode(EXR_opcode),
         .EXR_funct3(EXR_funct3),
-        .EX_opcode(EX_opcode),          // CHANGED: EX - EXR
-        .EX_funct3(EX_funct3),          // CHANGED
+        .EX_opcode(EX_opcode),
+        .EX_funct3(EX_funct3),
         .EX2_opcode(EX2_opcode),
         .EX2_funct3(EX2_funct3),
         .MEM_opcode(MEM_opcode),
         .MEM_funct3(MEM_funct3),
         .raw_imm(raw_imm[11:0]),
         .EXR_raw_imm(EXR_raw_imm[11:0]),
-        .EX_raw_imm(EX_raw_imm[11:0]),  // CHANGED
+        .EX_raw_imm(EX_raw_imm[11:0]),
         .EX2_raw_imm(EX2_raw_imm[11:0]),
         .EXR_jump(EXR_jump),
-        .EX_jump(EX_jump),              // CHANGED
+        .EX_jump(EX_jump),
         .EX2_jump(EX2_jump),
         .csr_write_enable(cu_csr_write_enable),
         .alu_result(alu_result[1:0]),
@@ -617,6 +627,9 @@ module RV32IM72F8SP #(
         .branch_target_lsbs(branch_target[1:0]),
         .branch_estimation(branch_estimation),
         .branch_prediction_miss(branch_prediction_miss),
+        .timer_interrupt(timer_interrupt_pending),
+        .mstatus_mie(mstatus_mie),
+        .mie_mtie(mie_mtie),
 
         .trapped(trapped),
         .trap_status(trap_status)
@@ -858,7 +871,8 @@ module RV32IM72F8SP #(
         .standby_mode(standby_mode),
         .csr_write_enable(tc_csr_write_enable),
         .csr_trap_address(csr_trap_address),
-        .csr_trap_write_data(csr_trap_write_data)
+        .csr_trap_write_data(csr_trap_write_data),
+        .mret_executed(mret_executed)
     );
 
     // =========================================================================
