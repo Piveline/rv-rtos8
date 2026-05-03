@@ -11,6 +11,7 @@ module RV32IM54F8SP #(
     input reset,
     input UART_busy,
     input timer_interrupt_pending,
+    input [XLEN-1:0] MMIO_read_data,
 
      // IO Interface
     
