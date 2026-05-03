@@ -225,7 +225,7 @@ module RV32IM72F8SPSoCTOP #(
         .benchmark_start () //unused
     );
 
-    UARTTX uart_tx (
+    UARTTX uart_tx_inst (
         .clk      (sys_clk),
         .reset    (sys_reset),
         .tx_start (tx_start),
@@ -289,13 +289,13 @@ module RV32IM72F8SPSoCTOP #(
     wire [XLEN-1:0] MMIO_data_memory_address;
     wire            MMIO_data_memory_write_enable;
 
-    RV32IM72F8SP #(.XLEN(XLEN)) rv32im72f8sp (
+    RV32IM54F8SP #(.XLEN(XLEN)) rv32im54f8sp (
         .clk                        (sys_clk),
         .clk_enable                 (cpu_clk_enable),
         .reset                      (sys_reset),
         .UART_busy                  (tx_busy),
         .timer_interrupt_pending    (timer_interrupt),
-        .mmio_read_data             (soc_mmio_read_data),
+        .MMIO_read_data             (soc_mmio_read_data),
 
         .retire_instruction         (retire_instruction),
         .MMIO_data_memory_write_data    (MMIO_data_memory_write_data),
