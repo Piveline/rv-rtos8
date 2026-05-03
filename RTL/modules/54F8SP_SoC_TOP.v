@@ -24,8 +24,6 @@ module RV32IM72F8SPSoCTOP #(
     // sys_clk (100MHz): CLK100MHZ from onboard crystal oscillator
     // pixel_clk (25MHz) + serial_clk (125MHz): PLL 
 
-    wire sys_clk = CLK100MHZ;
-
     wire pixel_clk;     // 25 MHz
     wire serial_clk;    // 125 MHz
     wire pll_locked;
@@ -34,6 +32,7 @@ module RV32IM72F8SPSoCTOP #(
         .clk_in1  (CLK100MHZ),
         .clk_out1 (pixel_clk),
         .clk_out2 (serial_clk),
+        .clk_out3 (sys_clk),
         .reset    (~CPU_RESETN),
         .locked   (pll_locked)
     );
