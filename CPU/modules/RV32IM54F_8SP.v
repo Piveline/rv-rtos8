@@ -3,7 +3,7 @@
 `include "./alu_op.vh"
 `include "./opcode.vh"
 
-module RV32IM72F8SP #(
+module RV32IM54F8SP #(
     parameter XLEN = 32
 )(
     input clk,
