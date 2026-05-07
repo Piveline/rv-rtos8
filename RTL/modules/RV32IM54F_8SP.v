@@ -378,7 +378,7 @@ module RV32IM54F8SP #(
         end
 
     wire [XLEN-1:0] data_memory_read_data_muxed;
-    assign data_memory_read_data_muxed = mmio_hit_reg ? mmio_read_data : data_memory_read_data;
+    assign data_memory_read_data_muxed = mmio_hit_reg ? MMIO_read_data : data_memory_read_data;
 
     // =========================================================================
     // EXR stage combinational logic: ALU source selection + forwarding
