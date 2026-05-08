@@ -166,7 +166,7 @@ module CSRFile #(
                     default: ;
                 endcase
             end
-            else if (pre_trap_handler) begin
+            else if (pre_trap_handler && !mret_executed) begin
                 mepc <= enter_pc;
                 mcause <= trap_cause;
             end

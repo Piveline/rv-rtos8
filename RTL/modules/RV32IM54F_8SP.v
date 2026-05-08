@@ -144,6 +144,12 @@ module RV32IM54F8SP #(
     wire [XLEN-1:0] csr_trap_write_data;
     wire pth_done_flush;
     wire standby_mode;
+    wire pre_trap_handler;
+    wire mret_executed;
+    wire [XLEN-1:0] enter_pc;
+    wire [XLEN-1:0] trap_cause;
+    wire [XLEN-1:0] vector_address;
+    wire [XLEN-1:0] return_address;
     
     // IF_IO_Register
     wire [XLEN-1:0] IO_pc;
@@ -604,7 +610,12 @@ module RV32IM54F8SP #(
         .valid_csr_address(trapped ? 1'b1 : ID_valid_csr_address),
         .mret_executed(mret_executed),
         .timer_interrupt_pending(timer_interrupt_pending),
+        .pre_trap_handler(pre_trap_handler),
+        .enter_pc(enter_pc),
+        .trap_cause(trap_cause),
 
+        .vector_address(vector_address),
+        .return_address(return_address),
         .csr_read_out(csr_read_out),
         .csr_ready(csr_ready),
         .mstatus_mie(mstatus_mie),
@@ -892,6 +903,8 @@ module RV32IM54F8SP #(
         .MEM_pc(MEM_pc),
         .WB_pc(WB_pc),
         .csr_read_data(csr_read_out),
+        .vector_address(vector_address),
+        .return_address(return_address),
 
         .debug_mode(debug_mode),
         .trap_target(trap_target),
@@ -903,7 +916,10 @@ module RV32IM54F8SP #(
         .csr_write_enable(tc_csr_write_enable),
         .csr_trap_address(csr_trap_address),
         .csr_trap_write_data(csr_trap_write_data),
-        .mret_executed(mret_executed)
+        .mret_executed(mret_executed),
+        .pre_trap_handler(pre_trap_handler),
+        .enter_pc(enter_pc),
+        .trap_cause(trap_cause)
     );
 
     // =========================================================================

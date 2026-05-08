@@ -164,7 +164,7 @@ always @(*) begin
                     mret_executed          = 1'b1;
                     pre_trap_handler       = 1'b1;
                     trap_target = {return_address[XLEN-1:2], 2'b0};      // mepc as-is
- 
+                    next_trap_handle_state = IDLE;
                 end 
                 else if (trap_status == `TRAP_ECALL ||
                     trap_status == `TIMER_INTERRUPT_IRQ) begin
@@ -177,24 +177,10 @@ always @(*) begin
  
                 end 
                 else begin
-                    trap_done = 1'b1;
-                    pth_done_flush = 1'b1;
-                    pre_trap_handler = 1'b1;
-                    next_trap_handle_state = IDLE;
-                    trap_target = vector_address;
-                    enter_pc = MEM_pc;
-                    if (is_timer_interrupt)
-                        trap_cause = 32'h8000_0007;
-                    else if (trap_status == `TRAP_EBREAK)
-                        trap_cause = 32'd3;
-                    else if (trap_status == `TRAP_ECALL)
-                        trap_cause = 32'd11;
-                    else if (trap_status == `TRAP_MISALIGNED_LOAD)
-                        trap_cause = 32'd4;
-                    else if (trap_status == `TRAP_MISALIGNED_STORE)
-                        trap_cause = 32'd6;
-                    else
-                        trap_cause = 32'd0; // MISALIGNED_INSTRUCTION
+                    trap_done = 1'b0;
+                    pth_done_flush = 1'b0;
+                    pre_trap_handler = 1'b0;
+                    next_trap_handle_state = DIRECT_PTH_MEM;
                 end
             end
  
@@ -334,6 +320,27 @@ always @(*) begin
                 next_trap_handle_state = IDLE;
                 trap_target = vector_address;
                 enter_pc = EX_pc;
+                if (is_timer_interrupt)
+                    trap_cause = 32'h8000_0007;
+                else if (trap_status == `TRAP_EBREAK)
+                    trap_cause = 32'd3;
+                else if (trap_status == `TRAP_ECALL)
+                    trap_cause = 32'd11;
+                else if (trap_status == `TRAP_MISALIGNED_LOAD)
+                    trap_cause = 32'd4;
+                else if (trap_status == `TRAP_MISALIGNED_STORE)
+                    trap_cause = 32'd6;
+                else
+                    trap_cause = 32'd0; // MISALIGNED_INSTRUCTION
+            end
+
+            DIRECT_PTH_MEM: begin
+                trap_done = 1'b1;
+                pth_done_flush = 1'b1;
+                pre_trap_handler = 1'b1;
+                next_trap_handle_state = IDLE;
+                trap_target = vector_address;
+                enter_pc = MEM_pc;
                 if (is_timer_interrupt)
                     trap_cause = 32'h8000_0007;
                 else if (trap_status == `TRAP_EBREAK)
