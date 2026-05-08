@@ -16,6 +16,11 @@ module CSRFile #(
     input valid_csr_address,
     input timer_interrupt_pending,
 
+    input pre_trap_handler,
+    input [XLEN-1:0] enter_pc,
+    input [XLEN-1:0] trap_cause,
+    output wire [XLEN-1:0] vector_address,
+
     output reg [XLEN-1:0] csr_read_out,   // data from CSR Unit
     output reg csr_ready,              // signal to stall the process while accessing the CSR until it outputs the desired value.
     output mstatus_mie, 
@@ -53,6 +58,7 @@ module CSRFile #(
     assign mstatus_mie = MIE;
     assign mie_mtie = mie[7];
 
+    assign vector_address = pre_trap_handler ? mtvec : {XLEN{1'b0}};
 
     localparam [XLEN-1:0] DEFAULT_mtvec  = 32'h00006D60;
     localparam [XLEN-1:0] DEFAULT_mepc   = {XLEN{1'b0}};
@@ -61,6 +67,7 @@ module CSRFile #(
     localparam [XLEN-1:0] DEFAULT_mcycle = 32'b0;
     localparam [XLEN-1:0] DEFAULT_minstret = 32'b0;
     localparam [XLEN-1:0] DEFAULT_mie    = 32'b0;
+
     // Read Operation.
     always @(*) begin
         case (csr_read_address)
@@ -147,16 +154,21 @@ module CSRFile #(
             end
 
             // Write Operation
-            if ((trapped && csr_write_enable) || (csr_write_enable)) begin
-            case (csr_write_address)
-                12'h304: mie    <=   csr_write_data;
-                12'h305: mtvec  <=   csr_write_data;
-                12'h340: mscratch <= csr_write_data;
-                12'h341: mepc   <=   csr_write_data;
-                12'h342: mcause <=   csr_write_data;
-                default: ;
-            endcase
+            if (!pre_trap_handler && csr_write_enable) begin
+                case (csr_write_address)
+                    12'h304: mie    <=   csr_write_data;
+                    12'h305: mtvec  <=   csr_write_data;
+                    12'h340: mscratch <= csr_write_data;
+                    12'h341: mepc   <=   csr_write_data;
+                    12'h342: mcause <=   csr_write_data;
+                    default: ;
+                endcase
             end
+            else if (pre_trap_handler) begin
+                mepc <= enter_pc;
+                mcause <= trap_cause;
+            end
+
         end
     end
 
