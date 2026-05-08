@@ -20,6 +20,7 @@ module CSRFile #(
     input [XLEN-1:0] enter_pc,
     input [XLEN-1:0] trap_cause,
     output wire [XLEN-1:0] vector_address,
+    output wire [XLEN-1:0] return_address,
 
     output reg [XLEN-1:0] csr_read_out,   // data from CSR Unit
     output reg csr_ready,              // signal to stall the process while accessing the CSR until it outputs the desired value.
@@ -59,6 +60,7 @@ module CSRFile #(
     assign mie_mtie = mie[7];
 
     assign vector_address = pre_trap_handler ? mtvec : {XLEN{1'b0}};
+    assign return_address = pre_trap_handler ? mepc : {XLEN{1'b0}};
 
     localparam [XLEN-1:0] DEFAULT_mtvec  = 32'h00006D60;
     localparam [XLEN-1:0] DEFAULT_mepc   = {XLEN{1'b0}};

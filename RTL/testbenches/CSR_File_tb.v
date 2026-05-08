@@ -17,6 +17,7 @@ module CSRFile_tb;
     reg  [31:0] enter_pc;
     reg  [31:0] trap_cause;
     wire [31:0] vector_address;
+    wire [31:0] return_address;
 
     wire [31:0] csr_read_out;
     wire        csr_ready;
@@ -42,6 +43,7 @@ module CSRFile_tb;
         .enter_pc(enter_pc),
         .trap_cause(trap_cause),
         .vector_address(vector_address),
+        .return_address(return_address),
 
         .csr_read_out(csr_read_out),
         .csr_ready(csr_ready), 
@@ -371,12 +373,16 @@ module CSRFile_tb;
         trapped          = 1'b1;
         #1;
         $display("During PTH before posedge: vector_address = %h (expected 00007000)", vector_address);
+        $display("During PTH before posedge: return_address = %h (expected 00004000)", return_address);
         #9;
+        $display("During PTH after posedge: vector_address = %h (expected 00007000)", vector_address);
+        $display("During PTH after posedge: return_address = %h (expected 0000028C)", return_address);
 
         pre_trap_handler = 1'b0;
         trapped          = 1'b0;
         #1;
         $display("After PTH deassert: vector_address = %h (expected 00000000)", vector_address);
+        $display("After PTH deassert: return_address = %h (expected 00000000)", return_address);
         #9;
 
         // 17-4. Check that PTH sideband wrote mepc/mcause and trap entry updated mstatus.
