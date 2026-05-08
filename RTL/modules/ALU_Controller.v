@@ -1,10 +1,10 @@
-`include "./alu_op.vh"
-`include "./branch_funct3.vh"
-`include "./csr_funct3.vh"
-`include "./itype_funct3.vh"
-`include "./opcode.vh"
-`include "./rtype_funct3.vh"
-`include "./rtype_mul_funct3.vh"
+`include "./modules/headers/alu_op.vh"
+`include "./modules/headers/branch_funct3.vh"
+`include "./modules/headers/csr_funct3.vh"
+`include "./modules/headers/itype_funct3.vh"
+`include "./modules/headers/opcode.vh"
+`include "./modules/headers/rtype_funct3.vh"
+`include "./modules/headers/rtype_mul_funct3.vh"
 
 module ALUController (
 	input clk,

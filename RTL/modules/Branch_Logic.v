@@ -1,4 +1,4 @@
-`include "./branch_funct3.vh"
+`include "./modules/headers/branch_funct3.vh"
 
 module BranchLogic #(
     parameter XLEN = 32

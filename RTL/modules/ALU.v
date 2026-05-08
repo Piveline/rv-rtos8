@@ -1,4 +1,7 @@
-`include "./headers/alu_op.vh"
+`include "./modules/headers/alu_op.vh"
+`include "./modules/ALU_WORD.v"
+`include "./modules/Multiplier_WORD.v"
+`include "./modules/Divider_WORD.v"
 
 module ALU #(
     parameter XLEN = 32

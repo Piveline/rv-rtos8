@@ -1,4 +1,4 @@
-`include "./alu_op.vh"
+`include "./modules/headers/alu_op.vh"
 
 module ALU_WORD (
     input [31:0] src_A,             // source operand A

@@ -1,4 +1,4 @@
-`include "./opcode.vh"
+`include "./modules/headers/opcode.vh"
 
 module BranchPredictor #(
     parameter XLEN = 32

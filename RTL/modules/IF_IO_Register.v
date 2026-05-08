@@ -1,4 +1,4 @@
-`include "./opcode.vh"
+`include "./modules/headers/opcode.vh"
 
 module IF_IO_Register #(
     parameter XLEN = 32

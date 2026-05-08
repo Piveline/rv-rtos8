@@ -1,8 +1,8 @@
-`include "./alu_src_select.vh"
-`include "./csr_funct3.vh"
-`include "./itype_funct3.vh"
-`include "./opcode.vh"
-`include "./rf_wd_select.vh"
+`include "./modules/headers/alu_src_select.vh"
+`include "./modules/headers/csr_funct3.vh"
+`include "./modules/headers/itype_funct3.vh"
+`include "./modules/headers/opcode.vh"
+`include "./modules/headers/rf_wd_select.vh"
 
 module ControlUnit (
 	input write_done,	// signal indicating if write is done

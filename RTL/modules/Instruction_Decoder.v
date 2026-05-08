@@ -1,4 +1,4 @@
-`include "./opcode.vh"
+`include "./modules/headers/opcode.vh"
 
 module InstructionDecoder (
 	input [31:0] instruction,
