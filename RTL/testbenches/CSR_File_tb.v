@@ -12,6 +12,13 @@ module CSRFile_tb;
     reg instruction_retired;
     reg timer_interrupt_pending;
 
+    // PTH sideband test signals
+    reg         pre_trap_handler;
+    reg  [31:0] enter_pc;
+    reg  [31:0] trap_cause;
+    wire [31:0] vector_address;
+    wire [31:0] return_address;
+
     wire [31:0] csr_read_out;
     wire        csr_ready;
 
@@ -32,6 +39,12 @@ module CSRFile_tb;
         .valid_csr_address(1'b1), // Assume all addresses are valid for testing
         .timer_interrupt_pending(timer_interrupt_pending),
 
+        .pre_trap_handler(pre_trap_handler),
+        .enter_pc(enter_pc),
+        .trap_cause(trap_cause),
+        .vector_address(vector_address),
+        .return_address(return_address),
+
         .csr_read_out(csr_read_out),
         .csr_ready(csr_ready), 
 
@@ -42,6 +55,11 @@ module CSRFile_tb;
     // Generate clock signal, 10ns.
     initial clk = 0;
     always #5 clk = ~clk;
+
+    initial begin
+        $dumpfile("./testbenches/results/waveforms/CSR_File.vcd");
+        $dumpvars(0, CSRFile_tb);
+    end
 
     initial begin
         $display("==================== CSR File Test START ====================");
@@ -56,6 +74,9 @@ module CSRFile_tb;
         csr_write_address = 12'h000;
         csr_write_data = 32'h0;
         instruction_retired = 0;
+        pre_trap_handler = 0;
+        enter_pc = 32'h0;
+        trap_cause = 32'h0;
         #10;
         reset = 0;
         #10;
@@ -315,6 +336,85 @@ module CSRFile_tb;
         //---------------
 
 
+
+        //-----------------------
+        $display("\n=== Test 17: PTH Sideband Path Test ===");
+
+        // 17-1. Set mtvec through the normal CSR write path.
+        csr_write_address = 12'h305;
+        csr_write_data    = 32'h00007000;
+        csr_write_enable  = 1'b1;
+        #10;
+        csr_write_enable  = 1'b0;
+        #10;
+
+        csr_read_address = 12'h305;
+        #10;
+        $display("PTH mtvec setup: mtvec = %h (expected 00007000)", csr_read_out);
+
+        // 17-2. Enable MIE so trap entry should save MIE into MPIE and clear MIE.
+        csr_write_address = 12'h300;
+        csr_write_data    = 32'h00000008; // MIE=1, MPIE=0, MPP is hardwired to 11 in DUT
+        csr_write_enable  = 1'b1;
+        #10;
+        csr_write_enable  = 1'b0;
+        #10;
+
+        csr_read_address = 12'h300;
+        #10;
+        $display("Before PTH: mstatus = %h (expected 00001808)", csr_read_out);
+
+        // 17-3. Assert pre_trap_handler and trapped in the same trap-entry cycle.
+        // vector_address is combinational, so it should expose mtvec immediately
+        // while pre_trap_handler is high, before the next clock edge commits mepc/mcause.
+        enter_pc         = 32'h0000028C;
+        trap_cause       = 32'h80000007; // Machine timer interrupt
+        pre_trap_handler = 1'b1;
+        trapped          = 1'b1;
+        #1;
+        $display("During PTH before posedge: vector_address = %h (expected 00007000)", vector_address);
+        $display("During PTH before posedge: return_address = %h (expected 00004000)", return_address);
+        #9;
+        $display("During PTH after posedge: vector_address = %h (expected 00007000)", vector_address);
+        $display("During PTH after posedge: return_address = %h (expected 0000028C)", return_address);
+
+        pre_trap_handler = 1'b0;
+        trapped          = 1'b0;
+        #1;
+        $display("After PTH deassert: vector_address = %h (expected 00000000)", vector_address);
+        $display("After PTH deassert: return_address = %h (expected 00000000)", return_address);
+        #9;
+
+        // 17-4. Check that PTH sideband wrote mepc/mcause and trap entry updated mstatus.
+        csr_read_address = 12'h341;
+        #10;
+        $display("After PTH: mepc = %h (expected 0000028C)", csr_read_out);
+
+        csr_read_address = 12'h342;
+        #10;
+        $display("After PTH: mcause = %h (expected 80000007)", csr_read_out);
+
+        csr_read_address = 12'h300;
+        #10;
+        $display("After PTH: mstatus = %h (expected 00001880)", csr_read_out);
+
+        // 17-5. Normal CSR write must be blocked while pre_trap_handler is active.
+        // Try to write mepc through normal CSR path while PTH writes another PC.
+        csr_write_address = 12'h341;
+        csr_write_data    = 32'hDEADBEEF;
+        enter_pc          = 32'h00000ABC;
+        trap_cause        = 32'h80000007;
+        pre_trap_handler  = 1'b1;
+        csr_write_enable  = 1'b1;
+        #10;
+        pre_trap_handler  = 1'b0;
+        csr_write_enable  = 1'b0;
+        #10;
+
+        csr_read_address = 12'h341;
+        #10;
+        $display("PTH priority over CSR write: mepc = %h (expected 00000ABC, not DEADBEEF)", csr_read_out);
+
         // Final values
         $display("\n=== Final Counter Values ===");
         csr_read_address = 12'hB00; #10;
@@ -332,6 +432,7 @@ module CSRFile_tb;
         $display("Final Full minstret = 0x%h_%h", csr_file.minstret[63:32], csr_file.minstret[31:0]);
         
         $display("\n====================  CSR File Test END  ====================");
+
         $stop;
     end
     
