@@ -55,6 +55,11 @@ module CSRFile_tb;
     always #5 clk = ~clk;
 
     initial begin
+        $dumpfile("./testbenches/results/waveforms/CSR_File.vcd");
+        $dumpvars(0, CSRFile_tb);
+    end
+
+    initial begin
         $display("==================== CSR File Test START ====================");
         
         // Reset to DEFAULT value, Initialize signals.
@@ -421,6 +426,7 @@ module CSRFile_tb;
         $display("Final Full minstret = 0x%h_%h", csr_file.minstret[63:32], csr_file.minstret[31:0]);
         
         $display("\n====================  CSR File Test END  ====================");
+
         $stop;
     end
     
