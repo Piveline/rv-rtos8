@@ -13,6 +13,8 @@ module TrapController #(
     input wire [XLEN-1:0] WB_pc,
     input wire [3:0] trap_status,  // [CHANGED] 3-bit → 4-bit to support TIMER_INTERRUPT_IRQ
     input wire [XLEN-1:0] csr_read_data,
+    input wire [XLEN-1:0] vector_address,      // directly from CSR file mtvec
+    input wire [XLEN-1:0] return_address,      // directly from CSR file mepc for MRET return
  
     output reg [XLEN-1:0] trap_target,      // jump target: mtvec (handler) or mepc (return)
     output reg ic_clean,                    // instruction cache flush for Zifencei
@@ -25,7 +27,10 @@ module TrapController #(
     output reg misaligned_memory_flush,
     output reg pth_done_flush,
     output reg standby_mode,                // pipeline drain in progress
-    output reg mret_executed                // [NEW] 1-cycle pulse when RETURN_MRET completes
+    output reg mret_executed,                // [NEW] 1-cycle pulse when RETURN_MRET completes
+    output reg pre_trap_handler,          // directly to CSR file
+    output reg [XLEN-1:0] enter_pc,         // directly to CSR file mepc
+    output reg [XLEN-1:0] trap_cause        // directly to CSR file mcause
 );
  
 // ============================================================
@@ -41,7 +46,9 @@ localparam  IDLE             = 4'b0000,
             MEM_STANDBY      = 4'b0111,  // pipeline drain stage 1
             WB_STANDBY       = 4'b1000,  // pipeline drain stage 2
             RTRE_STANDBY     = 4'b1001,  // pipeline drain stage 3
-            ECALL_MEPC_WRITE = 4'b1010;  // saves EX_pc to mepc after pipeline drain
+            ECALL_MEPC_WRITE = 4'b1010,  // saves EX_pc to mepc after pipeline drain
+            DIRECT_PTH_EX    = 4'b1011,  // directly jump to PTH handler within one cycle (for fast PTH handling)
+            DIRECT_PTH_MEM   = 4'b1100;  // directly jump to PTH handler within one cycle (for fast PTH handling)
  
 // ============================================================
 // Internal registers
@@ -74,14 +81,10 @@ always @(posedge clk or posedge reset) begin
         //   - Pipeline is fully drained at this point
         //   - trap_status still holds TIMER_INTERRUPT_IRQ at this cycle
         //   - Latching at IDLE would miss by 1 clock due to state transition
-        if (trap_handle_state == ECALL_MEPC_WRITE) begin
-            if (trap_status == `TIMER_INTERRUPT_IRQ)
-                is_timer_interrupt <= 1'b1;
-            else
-                is_timer_interrupt <= 1'b0;
+        if (trap_handle_state == IDLE && trap_status == `TIMER_INTERRUPT_IRQ) begin
+            is_timer_interrupt <= 1'b1;
         end
-        // Clear only after RETURN_MRET: timer interrupt handling fully complete
-        if (trap_handle_state == RETURN_MRET) begin
+        else if (trap_handle_state == IDLE) begin
             is_timer_interrupt <= 1'b0;
         end
  
@@ -126,13 +129,17 @@ always @(*) begin
     standby_mode                 = 1'b0;
     mret_executed                = 1'b0;
     next_trap_handle_state       = IDLE;
+    pre_trap_handler             = 1'b0;
+    enter_pc                     = {XLEN{1'b0}};
+    trap_cause                   = {XLEN{1'b0}};
  
     // No trap: stay in IDLE
     if (trap_status == `TRAP_NONE) begin
         next_trap_handle_state = IDLE;
  
     // FENCEI: flush instruction cache and return
-    end else if (trap_status == `TRAP_FENCEI) begin
+    end 
+    else if (trap_status == `TRAP_FENCEI) begin
         ic_clean               = 1'b1;
         trap_done              = 1'b1;
         next_trap_handle_state = IDLE;
@@ -141,7 +148,8 @@ always @(*) begin
     // Without this condition, when FSM returns to IDLE after handling timer interrupt,
     // if trap_status is still TIMER_INTERRUPT_IRQ, FSM would start a second handling.
     // is_timer_interrupt=1 means "already handled" → ignore the signal.
-    end else if (trap_status == `TIMER_INTERRUPT_IRQ && is_timer_interrupt &&
+    end 
+    else if (trap_status == `TIMER_INTERRUPT_IRQ && is_timer_interrupt &&
                  trap_handle_state == IDLE) begin
         next_trap_handle_state = IDLE;
  
@@ -152,13 +160,14 @@ always @(*) begin
             // IDLE: decide handling path based on trap type
             IDLE: begin
                 if (trap_status == `TRAP_MRET) begin
-                    // MRET: read mepc to get return address
-                    csr_trap_address       = 12'h341; // mepc
-                    trap_done              = 1'b0;
-                    next_trap_handle_state = READ_MEPC;
+                    trap_done              = 1'b1;
+                    mret_executed          = 1'b1;
+                    pre_trap_handler       = 1'b1;
+                    trap_target = {return_address[XLEN-1:2], 2'b0};      // mepc as-is
  
-                end else if (trap_status == `TRAP_ECALL ||
-                             trap_status == `TIMER_INTERRUPT_IRQ) begin
+                end 
+                else if (trap_status == `TRAP_ECALL ||
+                    trap_status == `TIMER_INTERRUPT_IRQ) begin
                     // ECALL / TIMER_INTERRUPT: same flow
                     // Both require pipeline drain → mepc save → mcause write → mtvec jump
                     // Differences (mcause value, return address) handled in later states
@@ -166,14 +175,26 @@ always @(*) begin
                     trap_done              = 1'b0;
                     next_trap_handle_state = MEM_STANDBY;
  
-                end else begin
-                    // EBREAK, MISALIGNED_*: immediately save MEM_pc to mepc
-                    // No standby needed: trap detected at MEM stage already
-                    csr_write_enable       = 1'b1;
-                    csr_trap_address       = 12'h341; // mepc
-                    csr_trap_write_data    = MEM_pc;
-                    trap_done              = 1'b0;
-                    next_trap_handle_state = WRITE_MEPC;
+                end 
+                else begin
+                    trap_done = 1'b1;
+                    pth_done_flush = 1'b1;
+                    pre_trap_handler = 1'b1;
+                    next_trap_handle_state = IDLE;
+                    trap_target = vector_address;
+                    enter_pc = MEM_pc;
+                    if (is_timer_interrupt)
+                        trap_cause = 32'h8000_0007;
+                    else if (trap_status == `TRAP_EBREAK)
+                        trap_cause = 32'd3;
+                    else if (trap_status == `TRAP_ECALL)
+                        trap_cause = 32'd11;
+                    else if (trap_status == `TRAP_MISALIGNED_LOAD)
+                        trap_cause = 32'd4;
+                    else if (trap_status == `TRAP_MISALIGNED_STORE)
+                        trap_cause = 32'd6;
+                    else
+                        trap_cause = 32'd0; // MISALIGNED_INSTRUCTION
                 end
             end
  
@@ -195,7 +216,7 @@ always @(*) begin
             RTRE_STANDBY: begin
                 standby_mode           = 1'b1;
                 trap_done              = 1'b0;
-                next_trap_handle_state = ECALL_MEPC_WRITE;
+                next_trap_handle_state = DIRECT_PTH_EX;;
             end
  
             // Save EX_pc to mepc after pipeline drain
@@ -304,6 +325,27 @@ always @(*) begin
                 trap_done              = 1'b1;
                 mret_executed          = 1'b1; // [NEW] 1-cycle pulse: MRET complete
                 next_trap_handle_state = IDLE;
+            end
+
+            DIRECT_PTH_EX: begin
+                trap_done = 1'b1;
+                pth_done_flush = 1'b1;
+                pre_trap_handler = 1'b1;
+                next_trap_handle_state = IDLE;
+                trap_target = vector_address;
+                enter_pc = EX_pc;
+                if (is_timer_interrupt)
+                    trap_cause = 32'h8000_0007;
+                else if (trap_status == `TRAP_EBREAK)
+                    trap_cause = 32'd3;
+                else if (trap_status == `TRAP_ECALL)
+                    trap_cause = 32'd11;
+                else if (trap_status == `TRAP_MISALIGNED_LOAD)
+                    trap_cause = 32'd4;
+                else if (trap_status == `TRAP_MISALIGNED_STORE)
+                    trap_cause = 32'd6;
+                else
+                    trap_cause = 32'd0; // MISALIGNED_INSTRUCTION
             end
  
             default: begin
