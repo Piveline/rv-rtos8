@@ -1,11 +1,11 @@
-`include "./branch_funct3.vh"
-`include "./itype_funct3.vh"
-`include "./load_funct3.vh"
-`include "./rtype_funct3.vh"
-`include "./rtype_mul_funct3.vh"
-`include "./store_funct3.vh"
-`include "./opcode.vh"
-`include "./csr_funct3.vh"
+`include "./modules/headers/branch_funct3.vh"
+`include "./modules/headers/itype_funct3.vh"
+`include "./modules/headers/load_funct3.vh"
+`include "./modules/headers/rtype_funct3.vh"
+`include "./modules/headers/rtype_mul_funct3.vh"
+`include "./modules/headers/store_funct3.vh"
+`include "./modules/headers/opcode.vh"
+`include "./modules/headers/csr_funct3.vh"
 
 module InstructionMemory #(
     parameter XLEN = 32

@@ -1,4 +1,4 @@
-`include "./alu_op.vh"
+`include "./modules/headers/alu_op.vh"
 
 module Divider_WORD #(
     parameter XLEN = 32

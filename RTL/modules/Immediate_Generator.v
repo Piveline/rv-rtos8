@@ -1,4 +1,4 @@
-`include "./opcode.vh"
+`include "./modules/headers/opcode.vh"
 
 module ImmediateGenerator #(
 	parameter XLEN = 32

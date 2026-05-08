@@ -1,6 +1,6 @@
-`include "./opcode.vh"
-`include "./alu_src_select.vh"
-`include "./trap.vh"
+`include "./modules/headers/opcode.vh"
+`include "./modules/headers/alu_src_select.vh"
+`include "./modules/headers/trap.vh"
 
 module HazardUnit (
     input wire reset,

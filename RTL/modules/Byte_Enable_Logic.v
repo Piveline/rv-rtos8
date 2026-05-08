@@ -1,5 +1,5 @@
-`include "./load_funct3.vh"
-`include "./store_funct3.vh"
+`include "./modules/headers/load_funct3.vh"
+`include "./modules/headers/store_funct3.vh"
 
 module ByteEnableLogic #(
 	parameter XLEN = 32
