@@ -1,309 +1,267 @@
-`timescale 1ns/1ps
+// ============================================================================
+// tb_SoC_TOP — RV32IM54F8SP SoC Testbench
+// Idle / No-input version
+// ============================================================================
+// iverilog + GTKWave:
+//   $dumpvars(0, tb_SoC_TOP) 로 모든 계층의 모든 신호를 VCD에 기록합니다.
+//
+// Vivado xsim:
+//   Scope 패널에서 계층을 펼쳐 신호를 파형에 드래그하세요.
+// ============================================================================
 
-module tb_RV32IM54F8SPSoCTOP;
+`timescale 1ns / 1ps
+`include "./testbenches/xilinx_sim_stubs.v"
+`include "./modules/MMIO_Interface.v"
+`include "./modules/CLINT.v"
+`include "./modules/VRAM.v"
+`include "./modules/ps2_rx.v"
+`include "./modules/UART_TX.v"
+`include "./modules/font_rom.v"
+`include "./modules/RV32IM54F_8SP.v"
+`include "./modules/vga_ctrl.v"
 
-    // ============================================================
-    // 1. DUT external pins
-    // ============================================================
-    reg CLK100MHZ;
-    reg CPU_RESETN;
+module tb_SoC_TOP;
 
-    tri1 PS2_CLK;
-    tri1 PS2_DATA;
+    // ========================================================================
+    // Parameters
+    // ========================================================================
+    parameter CLK_PERIOD    = 10;       // 100 MHz
+    parameter SIM_TIME_US   = 5000;     // 시뮬레이션 시간 (µs, 기본 5ms)
+    parameter RESET_HOLD_NS = 50;      // 리셋 유지 시간
 
-    wire [2:0] HDMI_TX_P;
-    wire [2:0] HDMI_TX_N;
-    wire       HDMI_TX_CLK_P;
-    wire       HDMI_TX_CLK_N;
+    // ========================================================================
+    // DUT Port Signals
+    // ========================================================================
+    reg         CLK100MHZ;
+    reg         CPU_RESETN;
 
-    wire uart_tx;
-    wire [7:0] LED;
+    wire        PS2_CLK;
+    wire        PS2_DATA;
+    reg         ps2_clk_drive;
+    reg         ps2_data_drive;
+    reg         ps2_clk_oe;
+    reg         ps2_data_oe;
 
-    // ============================================================
-    // 2. DUT
-    // ============================================================
-    RV32IM54F8SPSoCTOP #(
-        .XLEN(32)
-    ) dut (
-        .CLK100MHZ     (CLK100MHZ),
-        .CPU_RESETN    (CPU_RESETN),
+    wire [2:0]  HDMI_TX_P;
+    wire [2:0]  HDMI_TX_N;
+    wire        HDMI_TX_CLK_P;
+    wire        HDMI_TX_CLK_N;
 
-        .PS2_CLK       (PS2_CLK),
-        .PS2_DATA      (PS2_DATA),
+    wire        uart_tx;
+    wire [7:0]  LED;
 
-        .HDMI_TX_P     (HDMI_TX_P),
-        .HDMI_TX_N     (HDMI_TX_N),
-        .HDMI_TX_CLK_P (HDMI_TX_CLK_P),
-        .HDMI_TX_CLK_N (HDMI_TX_CLK_N),
+    // ========================================================================
+    // PS/2 Bus Model (open-drain + pullup)
+    // ========================================================================
+    assign PS2_CLK  = ps2_clk_oe  ? ps2_clk_drive  : 1'bz;
+    assign PS2_DATA = ps2_data_oe ? ps2_data_drive : 1'bz;
 
-        .uart_tx       (uart_tx),
-        .LED           (LED)
+    pullup(PS2_CLK);
+    pullup(PS2_DATA);
+
+    // ========================================================================
+    // Clock — 100 MHz
+    // ========================================================================
+    initial CLK100MHZ = 1'b0;
+    always #(CLK_PERIOD / 2) CLK100MHZ = ~CLK100MHZ;
+
+    // ========================================================================
+    // DUT
+    // ========================================================================
+    RV32IM54F8SPSoCTOP #(.XLEN(32)) dut (
+        .CLK100MHZ       (CLK100MHZ),
+        .CPU_RESETN      (CPU_RESETN),
+        .PS2_CLK         (PS2_CLK),
+        .PS2_DATA        (PS2_DATA),
+        .HDMI_TX_P       (HDMI_TX_P),
+        .HDMI_TX_N       (HDMI_TX_N),
+        .HDMI_TX_CLK_P   (HDMI_TX_CLK_P),
+        .HDMI_TX_CLK_N   (HDMI_TX_CLK_N),
+        .uart_tx         (uart_tx),
+        .LED             (LED)
     );
 
-    // ============================================================
-    // 3. 100 MHz input clock
-    // ============================================================
+    // ========================================================================
+    // VCD 파형 덤프 — 모든 계층, 모든 신호
+    // ========================================================================
     initial begin
-        CLK100MHZ = 1'b0;
-        forever #5 CLK100MHZ = ~CLK100MHZ;   // 100 MHz
+        $dumpfile("soc_waveform.vcd");
+        $dumpvars(0, tb_SoC_TOP);
     end
 
-    // ============================================================
-    // 4. Reset sequence
-    // ============================================================
-    initial begin
-        CPU_RESETN = 1'b0;
+    // ========================================================================
+    // UART TX Monitor
+    // ========================================================================
+    localparam UART_BIT_PERIOD = 8680;  // 115200 baud @ 100MHz, BAUD_DIV=868
 
-        repeat (20) @(posedge CLK100MHZ);
-        CPU_RESETN = 1'b1;
-    end
-
-    // ============================================================
-    // 5. Wave dump
-    // ============================================================
-    integer sim_cycles;
+    integer uart_log_fd;
 
     initial begin
-        sim_cycles = 500000;
-
-        if (!$value$plusargs("CYCLES=%d", sim_cycles))
-            sim_cycles = 500000;
-
-        $dumpfile("soc_wave.vcd");
-
-        // 너무 크게 dump하면 VCD가 폭발하므로 기본은 주요 SoC 계층만 dump
-        $dumpvars(0, tb_RV32IM54F8SPSoCTOP);
-        $dumpvars(0, dut.clint_inst);
-        $dumpvars(0, dut.mmio);
-        $dumpvars(0, dut.uart_tx_inst);
-
-`ifdef DUMP_FULL_CPU
-        // CPU 내부까지 전부 보고 싶을 때만 켜기
-        // 주의: IMEM/DMEM 배열 때문에 VCD 크기가 매우 커질 수 있음
-        $dumpvars(0, dut.cpu);
-`endif
-
-        wait (CPU_RESETN === 1'b1);
-        wait (dut.sys_reset === 1'b0);
-
-        $display("[TB] Reset released.");
-        $display("[TB] sys_clk started, cpu_clk_enable=%b", dut.cpu_clk_enable);
-
-        repeat (sim_cycles) @(posedge dut.sys_clk);
-
-        $display("[TB] Simulation finished after %0d sys_clk cycles.", sim_cycles);
-        $finish;
+        uart_log_fd = $fopen("uart_output.log", "w");
     end
 
-    // ============================================================
-    // 6. UART print monitor
-    //    실제 serial tx decoding 대신, MMIO에서 UARTTX로 넘어가는 byte를 직접 출력
-    // ============================================================
-    always @(posedge dut.sys_clk) begin
-        if (!dut.sys_reset && dut.uart_tx_start) begin
-            $write("%c", dut.uart_tx_data);
-        end
-    end
+    reg [7:0] uart_rx_byte;
 
-    // ============================================================
-    // 7. Optional MMIO monitor
-    // ============================================================
-`ifdef TB_VERBOSE
-    always @(posedge dut.sys_clk) begin
-        if (!dut.sys_reset && dut.cpu_mmio_write_enable) begin
-            $display("[MMIO-W] t=%0t addr=0x%08h data=0x%08h clint_we=%b vram_we=%b uart_start=%b",
-                     $time,
-                     dut.cpu_mmio_address,
-                     dut.cpu_mmio_write_data,
-                     dut.clint_we,
-                     dut.vram_we,
-                     dut.uart_tx_start);
-        end
-    end
+    always begin
+        @(negedge uart_tx);
 
-    always @(posedge dut.sys_clk) begin
-        if (!dut.sys_reset && dut.timer_interrupt) begin
-            $display("[CLINT] t=%0t timer_interrupt=1 mtime=%0d mtimecmp=%0d",
-                     $time,
-                     dut.clint_inst.mtime,
-                     dut.clint_inst.mtimecmp);
-        end
-    end
-`endif
+        #(UART_BIT_PERIOD / 2);
 
-    // ============================================================
-    // 8. Optional fast CLINT tick
-    //    실제 100MHz/1000Hz = 100000 cycles/tick은 시뮬레이션이 느림.
-    //    -DFAST_CLINT를 주면 1000 cycles마다 tick을 강제로 넣음.
-    //    기능 검증용이며 정확한 real-time 검증용은 아님.
-    // ============================================================
-`ifdef FAST_CLINT
-    initial begin
-        wait (dut.sys_reset === 1'b0);
+        if (uart_tx == 1'b0) begin
+            uart_rx_byte = 8'h00;
 
-        forever begin
-            repeat (1000) @(posedge dut.sys_clk);
-
-            force dut.clint_inst.tick = 1'b1;
-            @(posedge dut.sys_clk);
-            release dut.clint_inst.tick;
-        end
-    end
-`endif
-
-    // ============================================================
-    // 9. PS/2 scancode injection helper
-    //    실제 PS/2 waveform을 만들지 않고 ps2_rx 출력 쪽을 force해서
-    //    SoC 내부 CDC/kb_new_data/kb_ack 흐름을 볼 수 있게 함.
-    // ============================================================
-    task inject_scancode;
-        input [7:0] code;
-        begin
-            wait (dut.pix_reset === 1'b0);
-
-            force dut.scancode       = code;
-            force dut.scancode_valid = 1'b1;
-
-            @(posedge dut.pixel_clk);
-
-            force dut.scancode_valid = 1'b0;
-            @(posedge dut.pixel_clk);
-
-            release dut.scancode;
-            release dut.scancode_valid;
-
-            repeat (50) @(posedge dut.sys_clk);
-        end
-    endtask
-
-    task kb_make;
-        input [7:0] code;
-        begin
-            inject_scancode(code);
-        end
-    endtask
-
-    task kb_break;
-        input [7:0] code;
-        begin
-            inject_scancode(8'hF0);
-            inject_scancode(code);
-        end
-    endtask
-
-    // PS/2 Set-2 scancode 기준: uptime + Enter
-    task type_uptime;
-        begin
-            // u p t i m e Enter
-            kb_make(8'h3C); // u
-            kb_make(8'h4D); // p
-            kb_make(8'h2C); // t
-            kb_make(8'h43); // i
-            kb_make(8'h3A); // m
-            kb_make(8'h24); // e
-            kb_make(8'h5A); // Enter
-        end
-    endtask
-
-`ifdef TYPE_UPTIME
-    initial begin
-        wait (dut.sys_reset === 1'b0);
-
-        // shell prompt가 뜰 시간을 조금 줌
-        repeat (200000) @(posedge dut.sys_clk);
-
-        $display("\n[TB] Injecting keyboard command: uptime");
-        type_uptime();
-    end
-`endif
-
-endmodule
-
-
-// ============================================================================
-// Testbench stubs
-// Use these only for non-Vivado simulation, e.g. Icarus/GTKWave.
-// Compile with: +define+TB_STUBS
-// ============================================================================
-
-`ifdef TB_STUBS
-
-module clk_wiz_0 (
-    input  wire clk_in1,
-    input  wire reset,
-    output wire clk_out1,   // pixel_clk
-    output wire clk_out2,   // serial_clk
-    output wire clk_out3,   // sys_clk
-    output wire locked
-);
-    reg pixel_clk_r;
-    reg [1:0] pix_div;
-
-    initial begin
-        pixel_clk_r = 1'b0;
-        pix_div     = 2'd0;
-    end
-
-    // sys_clk = 100 MHz
-    assign clk_out3 = clk_in1;
-
-    // serial_clk는 여기서는 실제 HDMI 검증 목적이 아니므로 100 MHz로 대체
-    assign clk_out2 = clk_in1;
-
-    // pixel_clk = 약 25 MHz
-    always @(posedge clk_in1 or posedge reset) begin
-        if (reset) begin
-            pix_div     <= 2'd0;
-            pixel_clk_r <= 1'b0;
-        end else begin
-            pix_div <= pix_div + 1'b1;
-            if (pix_div == 2'd1) begin
-                pix_div     <= 2'd0;
-                pixel_clk_r <= ~pixel_clk_r;
+            repeat (8) begin
+                #UART_BIT_PERIOD;
+                uart_rx_byte = {uart_tx, uart_rx_byte[7:1]};
             end
+
+            #UART_BIT_PERIOD;
+
+            if (uart_rx_byte >= 8'h20 && uart_rx_byte < 8'h7F)
+                $display("[UART] %0t: '%c' (0x%02h)",
+                    $time, uart_rx_byte, uart_rx_byte);
+            else if (uart_rx_byte == 8'h0A)
+                $display("[UART] %0t: <LF>", $time);
+            else if (uart_rx_byte == 8'h0D)
+                $display("[UART] %0t: <CR>", $time);
+            else
+                $display("[UART] %0t: 0x%02h", $time, uart_rx_byte);
+
+            if (uart_log_fd != 0)
+                $fwrite(uart_log_fd, "%c", uart_rx_byte);
         end
     end
 
-    assign clk_out1 = pixel_clk_r;
-    assign locked   = ~reset;
+    // ========================================================================
+    // LED Monitor
+    // ========================================================================
+    // LED[0]=clk_en  [1]=timer_irq  [2]=kb_new  [3]=inhibit_done  [7:4]=scan[3:0]
+    reg [7:0] led_prev;
+
+    initial begin
+        led_prev = 8'hxx;
+    end
+
+    always @(LED) begin
+        if (LED !== led_prev) begin
+            $display("[LED]  %0t: 0x%02h [clk_en=%b irq=%b kb=%b inhibit=%b scan=%04b]",
+                $time, LED, LED[0], LED[1], LED[2], LED[3], LED[7:4]);
+            led_prev = LED;
+        end
+    end
+
+    // ========================================================================
+    // PS/2 Stimulus Tasks
+    // ========================================================================
+    // Idle 테스트에서는 호출하지 않음.
+    // 나중에 키 입력 테스트가 필요하면 ps2_press_key()를 다시 호출하면 됨.
+    localparam PS2_CLK_HALF = 20_000;
+
+    task ps2_send_byte;
+        input [7:0] data;
+        reg parity;
+        integer i;
+        begin
+            parity = ~(^data);
+
+            ps2_data_oe = 1'b1;
+            ps2_clk_oe  = 1'b1;
+
+            // Start bit
+            ps2_data_drive = 1'b0;
+            ps2_clk_drive  = 1'b1;
+            #(PS2_CLK_HALF);
+            ps2_clk_drive = 1'b0;
+            #(PS2_CLK_HALF);
+
+            // 8 data bits, LSB first
+            for (i = 0; i < 8; i = i + 1) begin
+                ps2_clk_drive  = 1'b1;
+                ps2_data_drive = data[i];
+                #(PS2_CLK_HALF);
+                ps2_clk_drive = 1'b0;
+                #(PS2_CLK_HALF);
+            end
+
+            // Parity
+            ps2_clk_drive  = 1'b1;
+            ps2_data_drive = parity;
+            #(PS2_CLK_HALF);
+            ps2_clk_drive = 1'b0;
+            #(PS2_CLK_HALF);
+
+            // Stop
+            ps2_clk_drive  = 1'b1;
+            ps2_data_drive = 1'b1;
+            #(PS2_CLK_HALF);
+            ps2_clk_drive = 1'b0;
+            #(PS2_CLK_HALF);
+
+            // Release bus
+            ps2_clk_drive = 1'b1;
+            #(PS2_CLK_HALF);
+            ps2_clk_oe  = 1'b0;
+            ps2_data_oe = 1'b0;
+
+            $display("[PS2]  %0t: Sent 0x%02h", $time, data);
+            #(PS2_CLK_HALF * 4);
+        end
+    endtask
+
+    task ps2_press_key;
+        input [7:0] make_code;
+        begin
+            ps2_send_byte(make_code);
+            #100_000;
+            ps2_send_byte(8'hF0);
+            ps2_send_byte(make_code);
+            #200_000;
+        end
+    endtask
+
+    // ========================================================================
+    // Main Sequence — Idle / No PS/2 Input
+    // ========================================================================
+    initial begin
+        CPU_RESETN     = 1'b0;
+
+        // PS/2 line을 TB가 구동하지 않음.
+        // pullup에 의해 PS2_CLK, PS2_DATA는 idle-high 상태가 됨.
+        ps2_clk_oe     = 1'b0;
+        ps2_data_oe    = 1'b0;
+        ps2_clk_drive  = 1'b1;
+        ps2_data_drive = 1'b1;
+
+        $display("============================================");
+        $display(" RV32IM54F8SP SoC Testbench - IDLE MODE");
+        $display(" Sim: %0d us (%0d ms)", SIM_TIME_US, SIM_TIME_US / 1000);
+        $display("============================================");
+
+        // Reset
+        #RESET_HOLD_NS;
+        CPU_RESETN = 1'b1;
+        $display("[TB]   %0t: Reset released", $time);
+
+        // 아무 입력도 넣지 않고 idle 상태 관찰
+        $display("[TB]   %0t: No PS/2 input. System is running idle.", $time);
+
+        // 여기서 $finish 하지 않음.
+        // 아래 Timeout 블록이 SIM_TIME_US 이후 종료함.
+    end
+
+    // ========================================================================
+    // 1ms Status Monitor
+    // ========================================================================
+    integer ms_cnt;
+
+    initial begin
+        ms_cnt = 0;
+    end
+
+    always begin
+        #1_000_000;
+        ms_cnt = ms_cnt + 1;
+        $display("[TB]   %0t: %0d ms | LED=0x%02h", $time, ms_cnt, LED);
+    end
 
 endmodule
-
-
-module IOBUF #(
-    parameter DRIVE       = 12,
-    parameter IBUF_LOW_PWR = "FALSE",
-    parameter IOSTANDARD  = "LVCMOS33",
-    parameter SLEW        = "SLOW"
-)(
-    output wire O,
-    inout  wire IO,
-    input  wire I,
-    input  wire T
-);
-    assign O  = IO;
-    assign IO = T ? 1'bz : I;
-endmodule
-
-
-module rgb2dvi_0 (
-    output wire       TMDS_Clk_p,
-    output wire       TMDS_Clk_n,
-    output wire [2:0] TMDS_Data_p,
-    output wire [2:0] TMDS_Data_n,
-
-    input  wire [23:0] vid_pData,
-    input  wire        vid_pHSync,
-    input  wire        vid_pVSync,
-    input  wire        vid_pVDE,
-    input  wire        PixelClk,
-    input  wire        SerialClk,
-    input  wire        aRst
-);
-    assign TMDS_Clk_p  = PixelClk;
-    assign TMDS_Clk_n  = ~PixelClk;
-    assign TMDS_Data_p = 3'b000;
-    assign TMDS_Data_n = 3'b111;
-endmodule
-
-`endif

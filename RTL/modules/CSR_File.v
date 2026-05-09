@@ -15,12 +15,7 @@ module CSRFile #(
     input instruction_retired,
     input valid_csr_address,
     input timer_interrupt_pending,
-
-    input pre_trap_handler,
-    input [XLEN-1:0] enter_pc,
-    input [XLEN-1:0] trap_cause,
-    output wire [XLEN-1:0] vector_address,
-    output wire [XLEN-1:0] return_address,
+    input pth_read,
 
     output reg [XLEN-1:0] csr_read_out,   // data from CSR Unit
     output reg csr_ready,              // signal to stall the process while accessing the CSR until it outputs the desired value.
@@ -32,7 +27,7 @@ module CSRFile #(
     wire [XLEN-1:0] mvendorid = 32'h52_56_4B_43;    // "RVKC" ; "R"ISC-"V", "K"HWL & "C"hoiCube84.
     wire [XLEN-1:0] marchid   = 32'h34_36_53_35;    // "46S5" ; "46"F arch based "S"uper scalar "5"-Stage Pipeline Architecture.
     wire [XLEN-1:0] mimpid    = 32'h34_36_49_31;    // "46I1" ; "46" instructions RISC-V RV32"I" Revision "1".
-    wire [XLEN-1:0] mhartid   = 32'h0;
+    wire [XLEN-1:0] mhartid   = 32'h0;    // "RKC0" ; "R"oad to "K"AIST "C"ore 0.
     wire [XLEN-1:0] misa      = 32'h40001100;    // MXL = 32; misa[31:30] = 01. RV32"I"; misa[8] = 1.
     wire [XLEN-1:0] mip       = {24'b0, timer_interrupt_pending, 7'b0}; // MIP[7] = MTIP (Machine Timer Interrupt Pending)
     
@@ -51,21 +46,17 @@ module CSRFile #(
     reg [63:0] minstret;
 
     reg csr_processing;
-    reg [XLEN-1:0] csr_read_data;
-    
     reg trapped_d;
-    wire trap_entry_pulse;
-
-    assign trap_entry_pulse = trapped & ~trapped_d;
+    reg [XLEN-1:0] csr_read_data;
 
     wire csr_access;
+    wire trap_entry;
     assign csr_access = valid_csr_address;
+    assign trap_entry = trapped && !trapped_d;
 
     assign mstatus_mie = MIE;
     assign mie_mtie = mie[7];
 
-    assign vector_address = mtvec;
-    assign return_address = mepc;
 
     localparam [XLEN-1:0] DEFAULT_mtvec  = 32'h00006D60;
     localparam [XLEN-1:0] DEFAULT_mepc   = {XLEN{1'b0}};
@@ -74,7 +65,6 @@ module CSRFile #(
     localparam [XLEN-1:0] DEFAULT_mcycle = 32'b0;
     localparam [XLEN-1:0] DEFAULT_minstret = 32'b0;
     localparam [XLEN-1:0] DEFAULT_mie    = 32'b0;
-
     // Read Operation.
     always @(*) begin
         case (csr_read_address)
@@ -123,9 +113,9 @@ module CSRFile #(
             mcycle  <= DEFAULT_mcycle;
             minstret <= DEFAULT_minstret;
             mie     <= DEFAULT_mie;
-            trapped_d <= 1'b0;
 
             csr_processing <= 1'b0;
+            trapped_d <= 1'b0;
             csr_read_out <= {XLEN{1'b0}};
             
             MIE  <= 1'b0;
@@ -138,7 +128,7 @@ module CSRFile #(
             if (instruction_retired) begin
                 minstret <= minstret + 1;
             end
-            if (trap_entry_pulse) begin
+            if (trap_entry) begin
                 MPIE <= MIE;     
                 MIE  <= 1'b0;    
             end 
@@ -150,7 +140,7 @@ module CSRFile #(
                 MIE  <= csr_write_data[3];
                 MPIE <= csr_write_data[7];
             end
-            if (csr_access && !csr_processing) begin
+            if ((csr_access && !csr_processing) || pth_read) begin
                 csr_processing <= 1'b1;
                 csr_read_out <= csr_read_data;
             end 
@@ -163,21 +153,16 @@ module CSRFile #(
             end
 
             // Write Operation
-            if (!pre_trap_handler && csr_write_enable) begin
-                case (csr_write_address)
-                    12'h304: mie    <=   csr_write_data;
-                    12'h305: mtvec  <=   csr_write_data;
-                    12'h340: mscratch <= csr_write_data;
-                    12'h341: mepc   <=   csr_write_data;
-                    12'h342: mcause <=   csr_write_data;
-                    default: ;
-                endcase
+            if ((trapped && csr_write_enable) || (csr_write_enable)) begin
+            case (csr_write_address)
+                12'h304: mie    <=   csr_write_data;
+                12'h305: mtvec  <=   csr_write_data;
+                12'h340: mscratch <= csr_write_data;
+                12'h341: mepc   <=   csr_write_data;
+                12'h342: mcause <=   csr_write_data;
+                default: ;
+            endcase
             end
-            else if (pre_trap_handler && !mret_executed) begin
-                mepc <= enter_pc;
-                mcause <= trap_cause;
-            end
-
         end
     end
 
