@@ -398,6 +398,52 @@ module RV32IM54F8SP #(
     assign MMIO_data_memory_write_enable = MEM_memory_write;
     assign MMIO_data_memory_address = MEM_alu_result;
 
+    reg timer_irq_vld_d;
+    reg timer_irq_pulse;
+
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            timer_irq_vld_d <= 1'b0;
+            timer_irq_pulse <= 1'b0;
+        end
+        else if (clk_enable) begin
+            timer_irq_pulse <= timer_irq_vld & ~timer_irq_vld_d;
+            timer_irq_vld_d <= timer_irq_vld;
+        end
+        else begin
+            timer_irq_pulse <= 1'b0;
+        end
+    end
+
+    localparam NOP = 32'h00000013;
+    reg [XLEN-1:0] interrupted_pc_sel;
+
+    always @(*) begin
+        if (EXR_instruction != NOP) interrupted_pc_sel = EXR_pc;
+        else if (instruction != NOP) interrupted_pc_sel = pc;
+        else if (WB_instruction != NOP) interrupted_pc_sel = WB_pc;
+        else if (MEM_instruction != NOP) interrupted_pc_sel = MEM_pc;
+        else if (EX2_instruction != NOP) interrupted_pc_sel = EX2_pc;
+        else if (EX_instruction != NOP) interrupted_pc_sel = EX_pc;
+        else if (ID_instruction != NOP) interrupted_pc_sel = ID_pc;
+        else if (IO_instruction != NOP) interrupted_pc_sel = IO_pc;
+        else                      interrupted_pc_sel = pc; // 전부 NOP이면 IF의 PC (fetch 재개 지점)
+    end
+
+    wire [XLEN-1:0] interrupted_pc;
+    assign interrupted_pc = timer_irq_vld ? interrupted_pc_sel : {XLEN{1'b0}};
+    reg [XLEN-1:0] interrupted_pc_reg;
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            interrupted_pc_reg <= {XLEN{1'b0}};
+        end
+        else if (clk_enable) begin
+            if (!timer_irq_pulse && timer_irq_vld) begin
+                interrupted_pc_reg <= interrupted_pc;
+            end
+        end
+    end
+
     // MMIO Interface logics
     reg mmio_hit_reg;
     always @(posedge clk or posedge reset) begin
@@ -440,7 +486,7 @@ module RV32IM54F8SP #(
             `ALU_SRC_B_RD2:   EXR_normal_source_b = EXR_read_data2;
             `ALU_SRC_B_IMM:   EXR_normal_source_b = EXR_imm;
             `ALU_SRC_B_SHAMT: EXR_normal_source_b = {26'b0, EXR_imm[4:0]};
-            `ALU_SRC_B_CSR:   EXR_normal_source_b = csr_forward_data;
+            `ALU_SRC_B_CSR:   EXR_normal_source_b = EXR_csr_read_data;
             default:           EXR_normal_source_b = {XLEN{1'b0}};
         endcase
 
@@ -645,6 +691,7 @@ module RV32IM54F8SP #(
         .clk(clk),
         .clk_enable(clk_enable),
         .reset(reset),
+        .IF_IO_stall(IF_IO_stall),
         .ID_opcode(opcode),
         .ID_funct3(funct3),
         .EXR_opcode(EXR_opcode),
@@ -672,7 +719,10 @@ module RV32IM54F8SP #(
         .timer_interrupt(timer_interrupt_pending),
         .mstatus_mie(mstatus_mie),
         .mie_mtie(mie_mtie),
+        .pth_done_flush(pth_done_flush),
 
+        .handler_pending(handler_pending),
+        .timer_irq_vld(timer_irq_vld),
         .trapped(trapped),
         .trap_status(trap_status)
     );
@@ -869,7 +919,7 @@ module RV32IM54F8SP #(
         .jump(EX2_jump),
         .branch_estimation(branch_estimation),
         .branch_prediction_miss(branch_prediction_miss),
-        .trapped(trapped),
+        .trapped(trapped || handler_pending),
         .pc(pc),
         .jump_target(EX2_alu_result),
         .branch_target(branch_target),
@@ -896,7 +946,9 @@ module RV32IM54F8SP #(
         .clk(clk),
         .clk_enable(clk_enable),
         .reset(reset),
+        .IF_IO_stall(IF_IO_stall),
         .trap_status(trap_status),
+        .interrupted_pc(interrupted_pc_reg),
         .ID_pc(ID_pc),
         .EX_pc(EXR_pc),                  // CHANGED: EX_pc - EXR_pc
         .EX2_pc(EX2_pc),
@@ -905,6 +957,7 @@ module RV32IM54F8SP #(
         .csr_read_data(csr_read_out),
         .vector_address(vector_address),
         .return_address(return_address),
+        .handler_pending(handler_pending),
 
         .debug_mode(debug_mode),
         .trap_target(trap_target),
@@ -1271,6 +1324,8 @@ module RV32IM54F8SP #(
         end
     end
 
+    reg [XLEN-1:0] retire_pc;
+
     always @(posedge clk or posedge reset) begin
         if (reset) begin
             retire_rd <= 5'b0;
@@ -1278,6 +1333,7 @@ module RV32IM54F8SP #(
             retire_opcode <= 7'b0;
             retire_alu_result <= {XLEN{1'b0}};
             retire_imm <= {XLEN{1'b0}};
+            retire_pc <= {XLEN{1'b0}};
             retire_pc_plus_4 <= {XLEN{1'b0}};
             retire_csr_read_data <= {XLEN{1'b0}};
             retire_byte_enable_logic_register_file_write_data <= {XLEN{1'b0}};
@@ -1290,6 +1346,7 @@ module RV32IM54F8SP #(
                 retire_opcode <= retire_opcode;
                 retire_alu_result <= retire_alu_result;
                 retire_imm <= retire_imm;
+                retire_pc <= retire_pc;
                 retire_pc_plus_4 <= retire_pc_plus_4;
                 retire_csr_read_data <= retire_csr_read_data;
                 retire_byte_enable_logic_register_file_write_data <= retire_byte_enable_logic_register_file_write_data;
@@ -1300,6 +1357,7 @@ module RV32IM54F8SP #(
                 retire_opcode <= WB_opcode;
                 retire_alu_result <= WB_alu_result;
                 retire_imm <= WB_imm;
+                retire_pc <= WB_pc;
                 retire_pc_plus_4 <= WB_pc_plus_4;
                 retire_csr_read_data <= WB_csr_read_data;
                 retire_byte_enable_logic_register_file_write_data <= register_file_write_data;

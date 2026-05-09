@@ -6,6 +6,8 @@ module TrapController #(
     input wire clk,
     input wire clk_enable,
     input wire reset,
+    input wire IF_IO_stall,
+    input wire [XLEN-1:0] interrupted_pc,
     input wire [XLEN-1:0] ID_pc,
     input wire [XLEN-1:0] EX_pc,   // PC saved to mepc for ECALL/TIMER_INTERRUPT
     input wire [XLEN-1:0] EX2_pc,
@@ -15,6 +17,7 @@ module TrapController #(
     input wire [XLEN-1:0] csr_read_data,
     input wire [XLEN-1:0] vector_address,      // directly from CSR file mtvec
     input wire [XLEN-1:0] return_address,      // directly from CSR file mepc for MRET return
+    input wire handler_pending,                // from Exception Detector: new trap or timer interrupt pending
  
     output reg [XLEN-1:0] trap_target,      // jump target: mtvec (handler) or mepc (return)
     output reg ic_clean,                    // instruction cache flush for Zifencei
@@ -48,7 +51,9 @@ localparam  IDLE             = 4'b0000,
             RTRE_STANDBY     = 4'b1001,  // pipeline drain stage 3
             ECALL_MEPC_WRITE = 4'b1010,  // saves EX_pc to mepc after pipeline drain
             DIRECT_PTH_EX    = 4'b1011,  // directly jump to PTH handler within one cycle (for fast PTH handling)
-            DIRECT_PTH_MEM   = 4'b1100;  // directly jump to PTH handler within one cycle (for fast PTH handling)
+            DIRECT_PTH_MEM   = 4'b1100,  // directly jump to PTH handler within one cycle (for fast PTH handling)
+            DIRECT_PTH_IRQ   = 4'b1101,  // directly jump to PTH handler within one cycle (for fast PTH handling)
+            DIRECT_PTH_EX2   = 4'b1110;  // same as DIRECT_PTH_EX but for IF_IO_stall case to ensure stable trap_target delivery
  
 // ============================================================
 // Internal registers
@@ -111,6 +116,22 @@ end
 always @(*) begin
     debug_mode = debug_mode_reg;
 end
+
+reg  IF_IO_stall_d;
+reg  IF_IO_stall_pulse;
+always @(posedge clk or posedge reset) begin
+    if (reset) begin
+        IF_IO_stall_d     <= 1'b0;
+        IF_IO_stall_pulse <= 1'b0;
+    end
+    else if (clk_enable) begin
+        IF_IO_stall_pulse <= IF_IO_stall & ~IF_IO_stall_d;
+        IF_IO_stall_d     <= IF_IO_stall;
+    end
+    else begin
+        IF_IO_stall_pulse <= 1'b0;
+    end
+end
  
 // ============================================================
 // Combinational: FSM output and next state logic
@@ -134,7 +155,7 @@ always @(*) begin
     trap_cause                   = {XLEN{1'b0}};
  
     // No trap: stay in IDLE
-    if (trap_status == `TRAP_NONE) begin
+    if (trap_status == `TRAP_NONE && !handler_pending) begin
         next_trap_handle_state = IDLE;
  
     // FENCEI: flush instruction cache and return
@@ -166,8 +187,7 @@ always @(*) begin
                     trap_target = {return_address[XLEN-1:2], 2'b0};      // mepc as-is
                     next_trap_handle_state = IDLE;
                 end 
-                else if (trap_status == `TRAP_ECALL ||
-                    trap_status == `TIMER_INTERRUPT_IRQ) begin
+                else if (trap_status == `TRAP_ECALL) begin
                     // ECALL / TIMER_INTERRUPT: same flow
                     // Both require pipeline drain → mepc save → mcause write → mtvec jump
                     // Differences (mcause value, return address) handled in later states
@@ -176,7 +196,13 @@ always @(*) begin
                     next_trap_handle_state = MEM_STANDBY;
  
                 end 
-                else begin
+                else if (trap_status == `TIMER_INTERRUPT_IRQ) begin
+                    trap_done = 1'b0;
+                    pth_done_flush = 1'b0;
+                    pre_trap_handler = 1'b0;
+                    next_trap_handle_state = MEM_STANDBY; // same flow as ECALL
+                end
+                else if (trap_status != `TRAP_NONE) begin
                     trap_done = 1'b0;
                     pth_done_flush = 1'b0;
                     pre_trap_handler = 1'b0;
@@ -202,7 +228,7 @@ always @(*) begin
             RTRE_STANDBY: begin
                 standby_mode           = 1'b1;
                 trap_done              = 1'b0;
-                next_trap_handle_state = DIRECT_PTH_EX;;
+                next_trap_handle_state = DIRECT_PTH_EX;
             end
  
             // Save EX_pc to mepc after pipeline drain
@@ -317,9 +343,30 @@ always @(*) begin
                 trap_done = 1'b1;
                 pth_done_flush = 1'b1;
                 pre_trap_handler = 1'b1;
+                next_trap_handle_state = DIRECT_PTH_EX2;
+                trap_target = vector_address;
+                enter_pc = interrupted_pc;
+                if (is_timer_interrupt)
+                    trap_cause = 32'h8000_0007;
+                else if (trap_status == `TRAP_EBREAK)
+                    trap_cause = 32'd3;
+                else if (trap_status == `TRAP_ECALL)
+                    trap_cause = 32'd11;
+                else if (trap_status == `TRAP_MISALIGNED_LOAD)
+                    trap_cause = 32'd4;
+                else if (trap_status == `TRAP_MISALIGNED_STORE)
+                    trap_cause = 32'd6;
+                else
+                    trap_cause = 32'd0; // MISALIGNED_INSTRUCTION
+            end
+
+            DIRECT_PTH_EX2: begin
+                trap_done = 1'b1;
+                pth_done_flush = 1'b1;
+                pre_trap_handler = 1'b1;
                 next_trap_handle_state = IDLE;
                 trap_target = vector_address;
-                enter_pc = EX_pc;
+                enter_pc = interrupted_pc;
                 if (is_timer_interrupt)
                     trap_cause = 32'h8000_0007;
                 else if (trap_status == `TRAP_EBREAK)
@@ -353,6 +400,16 @@ always @(*) begin
                     trap_cause = 32'd6;
                 else
                     trap_cause = 32'd0; // MISALIGNED_INSTRUCTION
+            end
+
+            DIRECT_PTH_IRQ: begin
+                trap_done = 1'b1;
+                pth_done_flush = 1'b1;
+                pre_trap_handler = 1'b1;
+                next_trap_handle_state = IF_IO_stall_pulse ? DIRECT_PTH_IRQ : IDLE;
+                trap_target = vector_address;
+                enter_pc = interrupted_pc;
+                trap_cause = 32'h8000_0007;
             end
  
             default: begin

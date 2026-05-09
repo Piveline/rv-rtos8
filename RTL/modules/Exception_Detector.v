@@ -10,6 +10,7 @@ module ExceptionDetector (
     input timer_interrupt,
     input mstatus_mie,
     input mie_mtie,
+    input IF_IO_stall,
     input [6:0] ID_opcode,
     input [6:0] EXR_opcode,
     input [6:0] EX_opcode,
@@ -34,7 +35,10 @@ module ExceptionDetector (
     input [1:0] branch_target_lsbs,
     input branch_estimation,
     input branch_prediction_miss,
+    input pth_done_flush,
     
+    output reg handler_pending,
+    output timer_irq_vld,
     output reg trapped,
     output reg [3:0] trap_status
 );
@@ -50,7 +54,7 @@ module ExceptionDetector (
     reg [3:0] MEM_trap_status;
     reg trapped_combinatorial;
     reg [3:0] trap_status_combinatorial;
-    wire timer_irq_vld=timer_interrupt && mstatus_mie && mie_mtie;
+    assign timer_irq_vld = timer_interrupt && mstatus_mie && mie_mtie;
     always @(*) begin
         ID_trap_status = `TRAP_NONE;
         ID_trapped = 1'b0;
@@ -384,10 +388,20 @@ module ExceptionDetector (
         if (reset) begin
             trapped <= 1'b0;
             trap_status <= `TRAP_NONE;
+            handler_pending <= 1'b0;
         end 
         else if (clk_enable) begin
             trapped <= trapped_combinatorial;
             trap_status <= trap_status_combinatorial;
+            if (timer_irq_vld) begin
+                handler_pending <= 1'b1;
+            end
+            else if (IF_IO_stall) begin
+                handler_pending <= handler_pending;
+            end
+            else if (pth_done_flush) begin
+                handler_pending <= 1'b0;
+            end
         end
     end
 endmodule

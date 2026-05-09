@@ -52,6 +52,11 @@ module CSRFile #(
 
     reg csr_processing;
     reg [XLEN-1:0] csr_read_data;
+    
+    reg trapped_d;
+    wire trap_entry_pulse;
+
+    assign trap_entry_pulse = trapped & ~trapped_d;
 
     wire csr_access;
     assign csr_access = valid_csr_address;
@@ -59,8 +64,8 @@ module CSRFile #(
     assign mstatus_mie = MIE;
     assign mie_mtie = mie[7];
 
-    assign vector_address = pre_trap_handler ? mtvec : {XLEN{1'b0}};
-    assign return_address = pre_trap_handler ? mepc : {XLEN{1'b0}};
+    assign vector_address = mtvec;
+    assign return_address = mepc;
 
     localparam [XLEN-1:0] DEFAULT_mtvec  = 32'h00006D60;
     localparam [XLEN-1:0] DEFAULT_mepc   = {XLEN{1'b0}};
@@ -118,6 +123,7 @@ module CSRFile #(
             mcycle  <= DEFAULT_mcycle;
             minstret <= DEFAULT_minstret;
             mie     <= DEFAULT_mie;
+            trapped_d <= 1'b0;
 
             csr_processing <= 1'b0;
             csr_read_out <= {XLEN{1'b0}};
@@ -127,11 +133,12 @@ module CSRFile #(
         end 
         else if (clk_enable) begin
             mcycle <= mcycle + 1;
+            trapped_d <= trapped;
           
             if (instruction_retired) begin
                 minstret <= minstret + 1;
             end
-            if (trapped) begin
+            if (trap_entry_pulse) begin
                 MPIE <= MIE;     
                 MIE  <= 1'b0;    
             end 
