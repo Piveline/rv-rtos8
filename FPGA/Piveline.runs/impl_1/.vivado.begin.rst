@@ -1,50 +1,20 @@
 <?xml version="1.0"?>
 <ProcessHandle Version="1" Minor="0">
-    <Process Command="vivado" Owner="root" Host="khwl-ThinkPad-X1-Carbon-Gen-13" Pid="55157" HostCore="16" HostMemory="32334300">
+    <Process Command="vivado" Owner="root" Host="khwl-ThinkPad-X1-Carbon-Gen-13" Pid="1274526" HostCore="16" HostMemory="32334288">
     </Process>
 </ProcessHandle>
 <?xml version="1.0"?>
 <ProcessHandle Version="1" Minor="0">
-    <Process Command="vivado" Owner="root" Host="khwl-ThinkPad-X1-Carbon-Gen-13" Pid="121929" HostCore="16" HostMemory="32334300">
+    <Process Command="vivado" Owner="root" Host="khwl-ThinkPad-X1-Carbon-Gen-13" Pid="1389565" HostCore="16" HostMemory="32334288">
     </Process>
 </ProcessHandle>
 <?xml version="1.0"?>
 <ProcessHandle Version="1" Minor="0">
-    <Process Command="vivado" Owner="root" Host="khwl-ThinkPad-X1-Carbon-Gen-13" Pid="125181" HostCore="16" HostMemory="32334300">
+    <Process Command="vivado" Owner="root" Host="khwl-ThinkPad-X1-Carbon-Gen-13" Pid="1393527" HostCore="16" HostMemory="32334288">
     </Process>
 </ProcessHandle>
 <?xml version="1.0"?>
 <ProcessHandle Version="1" Minor="0">
-    <Process Command="vivado" Owner="root" Host="khwl-ThinkPad-X1-Carbon-Gen-13" Pid="191932" HostCore="16" HostMemory="32334300">
-    </Process>
-</ProcessHandle>
-<?xml version="1.0"?>
-<ProcessHandle Version="1" Minor="0">
-    <Process Command="vivado" Owner="root" Host="khwl-ThinkPad-X1-Carbon-Gen-13" Pid="194392" HostCore="16" HostMemory="32334300">
-    </Process>
-</ProcessHandle>
-<?xml version="1.0"?>
-<ProcessHandle Version="1" Minor="0">
-    <Process Command="vivado" Owner="root" Host="khwl-ThinkPad-X1-Carbon-Gen-13" Pid="262613" HostCore="16" HostMemory="32334300">
-    </Process>
-</ProcessHandle>
-<?xml version="1.0"?>
-<ProcessHandle Version="1" Minor="0">
-    <Process Command="vivado" Owner="root" Host="khwl-ThinkPad-X1-Carbon-Gen-13" Pid="267994" HostCore="16" HostMemory="32334300">
-    </Process>
-</ProcessHandle>
-<?xml version="1.0"?>
-<ProcessHandle Version="1" Minor="0">
-    <Process Command="vivado" Owner="root" Host="khwl-ThinkPad-X1-Carbon-Gen-13" Pid="338122" HostCore="16" HostMemory="32334300">
-    </Process>
-</ProcessHandle>
-<?xml version="1.0"?>
-<ProcessHandle Version="1" Minor="0">
-    <Process Command="vivado" Owner="root" Host="khwl-ThinkPad-X1-Carbon-Gen-13" Pid="340335" HostCore="16" HostMemory="32334300">
-    </Process>
-</ProcessHandle>
-<?xml version="1.0"?>
-<ProcessHandle Version="1" Minor="0">
-    <Process Command="vivado" Owner="root" Host="khwl-ThinkPad-X1-Carbon-Gen-13" Pid="401246" HostCore="16" HostMemory="32334300">
+    <Process Command="vivado" Owner="root" Host="khwl-ThinkPad-X1-Carbon-Gen-13" Pid="1535845" HostCore="16" HostMemory="32334288">
     </Process>
 </ProcessHandle>
