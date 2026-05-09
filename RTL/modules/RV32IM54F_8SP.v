@@ -144,6 +144,7 @@ module RV32IM54F8SP #(
     wire [XLEN-1:0] csr_trap_write_data;
     wire pth_done_flush;
     wire standby_mode;
+    wire trap_csr_access;
     
     // IF_IO_Register
     wire [XLEN-1:0] IO_pc;
@@ -434,7 +435,7 @@ module RV32IM54F8SP #(
             `ALU_SRC_B_RD2:   EXR_normal_source_b = EXR_read_data2;
             `ALU_SRC_B_IMM:   EXR_normal_source_b = EXR_imm;
             `ALU_SRC_B_SHAMT: EXR_normal_source_b = {26'b0, EXR_imm[4:0]};
-            `ALU_SRC_B_CSR:   EXR_normal_source_b = csr_forward_data;
+            `ALU_SRC_B_CSR:   EXR_normal_source_b = EXR_csr_read_data;
             default:           EXR_normal_source_b = {XLEN{1'b0}};
         endcase
 
@@ -459,7 +460,7 @@ module RV32IM54F8SP #(
         endcase
 
         // CSR address and data selection (unchanged - WB/trap write, ID read)
-        if (!standby_mode && trapped) begin
+        if (trap_csr_access) begin
             csr_write_data   = csr_trap_write_data;
             csr_write_address = csr_trap_address;
             csr_read_address  = csr_trap_address;
@@ -604,6 +605,7 @@ module RV32IM54F8SP #(
         .valid_csr_address(trapped ? 1'b1 : ID_valid_csr_address),
         .mret_executed(mret_executed),
         .timer_interrupt_pending(timer_interrupt_pending),
+        .pth_read(pth_read),
 
         .csr_read_out(csr_read_out),
         .csr_ready(csr_ready),
@@ -858,7 +860,7 @@ module RV32IM54F8SP #(
         .jump(EX2_jump),
         .branch_estimation(branch_estimation),
         .branch_prediction_miss(branch_prediction_miss),
-        .trapped(trapped),
+        .trapped(trapped || goto_mtvec),
         .pc(pc),
         .jump_target(EX2_alu_result),
         .branch_target(branch_target),
@@ -886,8 +888,11 @@ module RV32IM54F8SP #(
         .clk_enable(clk_enable),
         .reset(reset),
         .trap_status(trap_status),
+        .IF_pc(instruction_pc),
+        .IO_pc(IO_pc),
         .ID_pc(ID_pc),
-        .EX_pc(EXR_pc),                  // CHANGED: EX_pc - EXR_pc
+        .EX_pc(EX_pc),                    // from old EX stage - used for precise exceptions, but renamed to EXR_pc in new design
+        .EXR_pc(EXR_pc),                  // CHANGED: EX_pc - EXR_pc
         .EX2_pc(EX2_pc),
         .MEM_pc(MEM_pc),
         .WB_pc(WB_pc),
@@ -900,10 +905,13 @@ module RV32IM54F8SP #(
         .misaligned_memory_flush(misaligned_memory_flush),
         .pth_done_flush(pth_done_flush),
         .standby_mode(standby_mode),
+        .trap_csr_access(trap_csr_access),
         .csr_write_enable(tc_csr_write_enable),
         .csr_trap_address(csr_trap_address),
         .csr_trap_write_data(csr_trap_write_data),
-        .mret_executed(mret_executed)
+        .mret_executed(mret_executed),
+        .pth_read(pth_read),
+        .goto_mtvec(goto_mtvec)
     );
 
     // =========================================================================
