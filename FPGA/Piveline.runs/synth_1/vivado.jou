@@ -3,22 +3,22 @@
 # SW Build 6299465 on Fri Nov 14 12:34:56 MST 2025
 # IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
 # SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
-# Start of session at: Mon Mar 23 20:23:58 2026
-# Process ID         : 339092
-# Current directory  : /home/khwl/Desktop/SMU/Piveline/Piveline.runs/synth_1
-# Command line       : vivado -log top.vds -product Vivado -mode batch -messageDb vivado.pb -notrace -source top.tcl
-# Log file           : /home/khwl/Desktop/SMU/Piveline/Piveline.runs/synth_1/top.vds
-# Journal file       : /home/khwl/Desktop/SMU/Piveline/Piveline.runs/synth_1/vivado.jou
+# Start of session at: Sat May  9 19:23:55 2026
+# Process ID         : 1393069
+# Current directory  : /home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.runs/synth_1
+# Command line       : vivado -log RV32IM54F8SPSoCTOP.vds -product Vivado -mode batch -messageDb vivado.pb -notrace -source RV32IM54F8SPSoCTOP.tcl
+# Log file           : /home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.runs/synth_1/RV32IM54F8SPSoCTOP.vds
+# Journal file       : /home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.runs/synth_1/vivado.jou
 # Running On         : khwl-ThinkPad-X1-Carbon-Gen-13
 # Platform           : Ubuntu
 # Operating System   : Ubuntu 24.04.4 LTS
 # Processor Detail   : Intel(R) Core(TM) Ultra 7 255H
-# CPU Frequency      : 3263.208 MHz
+# CPU Frequency      : 1770.034 MHz
 # CPU Physical cores : 16
 # CPU Logical cores  : 16
 # Host memory        : 33110 MB
 # Swap memory        : 8589 MB
 # Total Virtual      : 41700 MB
-# Available Virtual  : 33854 MB
+# Available Virtual  : 30022 MB
 #-----------------------------------------------------------
-source top.tcl -notrace
+source RV32IM54F8SPSoCTOP.tcl -notrace

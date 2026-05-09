@@ -1,217 +1,691 @@
 
 *** Running vivado
-    with args -log top.vds -m64 -product Vivado -mode batch -messageDb vivado.pb -notrace -source top.tcl
+    with args -log RV32IM54F8SPSoCTOP.vds -m64 -product Vivado -mode batch -messageDb vivado.pb -notrace -source RV32IM54F8SPSoCTOP.tcl
 
 
 ****** Vivado v2025.2 (64-bit)
   **** SW Build 6299465 on Fri Nov 14 12:34:56 MST 2025
   **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
   **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
-  **** Start of session at: Mon Mar 23 20:23:58 2026
+  **** Start of session at: Sat May  9 19:23:55 2026
     ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
     ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
 
-source top.tcl -notrace
+source RV32IM54F8SPSoCTOP.tcl -notrace
 INFO: [IP_Flow 19-234] Refreshing IP repositories
-INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/khwl/Downloads/vivado-library-master'.
+WARNING: [IP_Flow 19-2248] Failed to load user IP repository '/home/khwl/Desktop/Piveline/vivado-library-master'; Can't find the specified path.
+If this directory should no longer be in your list of user repositories, go to the IP Settings dialog and remove it.
 INFO: [IP_Flow 19-2313] Loaded Vivado IP repository '/tools/Xilinx/2025.2/data/ip'.
-Command: read_checkpoint -auto_incremental -incremental /home/khwl/Desktop/SMU/Piveline/Piveline.srcs/utils_1/imports/synth_1/top.dcp
-INFO: [Vivado 12-5825] Read reference checkpoint from /home/khwl/Desktop/SMU/Piveline/Piveline.srcs/utils_1/imports/synth_1/top.dcp for incremental synthesis
+Command: read_checkpoint -auto_incremental -incremental /home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/utils_1/imports/synth_1/top.dcp
+INFO: [Vivado 12-5825] Read reference checkpoint from /home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/utils_1/imports/synth_1/top.dcp for incremental synthesis
 INFO: [Vivado 12-7989] Please ensure there are no constraint changes
-Command: synth_design -top top -part xc7a200tsbg484-1
+Command: synth_design -top RV32IM54F8SPSoCTOP -part xc7a200tsbg484-1 -directive PerformanceOptimized -fsm_extraction one_hot -keep_equivalent_registers -resource_sharing off -no_lc -shreg_min_size 5
 Starting synth_design
+INFO: [IP_Flow 19-2162] IP 'rgb2dvi_0' is locked:
+* IP definition 'rgb2dvi (1.4)' for IP 'rgb2dvi_0' (customized with software release 2025.2) was not found in the IP Catalog.
 Attempting to get a license for feature 'Synthesis' and/or device 'xc7a200t'
 INFO: [Common 17-349] Got license for feature 'Synthesis' and/or device 'xc7a200t'
 INFO: [Device 21-403] Loading part xc7a200tsbg484-1
+INFO: [Designutils 20-5440] No compile time benefit to using incremental synthesis; A full resynthesis will be run
+INFO: [Designutils 20-4379] Flow is switching to default flow due to incremental criteria not met. If you would like to alter this behaviour and have the flow terminate instead, please set the following parameter config_implementation {autoIncr.Synth.RejectBehavior Terminate}
 INFO: [Synth 8-7079] Multithreading enabled for synth_design using a maximum of 7 processes.
 INFO: [Synth 8-7078] Launching helper process for spawning children vivado processes
-INFO: [Synth 8-7075] Helper process launched with PID 339139
+INFO: [Synth 8-7075] Helper process launched with PID 1393146
 ---------------------------------------------------------------------------------
-Starting RTL Elaboration : Time (s): cpu = 00:00:02 ; elapsed = 00:00:02 . Memory (MB): peak = 2257.293 ; gain = 482.875 ; free physical = 11555 ; free virtual = 30873
+Starting RTL Elaboration : Time (s): cpu = 00:00:02 ; elapsed = 00:00:02 . Memory (MB): peak = 2249.543 ; gain = 483.125 ; free physical = 7669 ; free virtual = 27178
 ---------------------------------------------------------------------------------
-INFO: [Synth 8-6157] synthesizing module 'top' [/home/khwl/Desktop/SMU/Piveline/Piveline.srcs/sources_1/imports/SMU/top.v:21]
-INFO: [Synth 8-6157] synthesizing module 'clk_wiz_0' [/home/khwl/Desktop/SMU/Piveline/Piveline.runs/synth_1/.Xil/Vivado-339092-khwl-ThinkPad-X1-Carbon-Gen-13/realtime/clk_wiz_0_stub.v:6]
-INFO: [Synth 8-6155] done synthesizing module 'clk_wiz_0' (0#1) [/home/khwl/Desktop/SMU/Piveline/Piveline.runs/synth_1/.Xil/Vivado-339092-khwl-ThinkPad-X1-Carbon-Gen-13/realtime/clk_wiz_0_stub.v:6]
+INFO: [Synth 8-11241] undeclared symbol 'mret_executed', assumed default net type 'wire' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:579]
+INFO: [Synth 8-11241] undeclared symbol 'pth_read', assumed default net type 'wire' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:581]
+INFO: [Synth 8-11241] undeclared symbol 'mstatus_mie', assumed default net type 'wire' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:585]
+INFO: [Synth 8-11241] undeclared symbol 'mie_mtie', assumed default net type 'wire' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:586]
+INFO: [Synth 8-11241] undeclared symbol 'exr_data_stall', assumed default net type 'wire' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:719]
+INFO: [Synth 8-11241] undeclared symbol 'goto_mtvec', assumed default net type 'wire' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:836]
+INFO: [Synth 8-11241] undeclared symbol 'instruction_pc', assumed default net type 'wire' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:864]
+INFO: [Synth 8-11241] undeclared symbol 'instruction_pc_plus_4', assumed default net type 'wire' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:905]
+WARNING: [Synth 8-8895] 'instruction_pc' is already implicitly declared on line 864 [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:1228]
+WARNING: [Synth 8-8895] 'instruction_pc_plus_4' is already implicitly declared on line 905 [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:1229]
+WARNING: [Synth 8-6901] identifier 'IO_instruction' is used before its declaration [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:39]
+WARNING: [Synth 8-6901] identifier 'IO_instruction' is used before its declaration [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:39]
+WARNING: [Synth 8-6901] identifier 'IO_instruction' is used before its declaration [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:39]
+WARNING: [Synth 8-6901] identifier 'IO_instruction' is used before its declaration [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:39]
+WARNING: [Synth 8-6901] identifier 'IO_instruction' is used before its declaration [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:40]
+INFO: [Synth 8-11241] undeclared symbol 'sys_clk', assumed default net type 'wire' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/54F8SP_SoC_TOP.v:36]
+INFO: [Synth 8-11241] undeclared symbol 'tx_busy', assumed default net type 'wire' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/54F8SP_SoC_TOP.v:194]
+WARNING: [Synth 8-8895] 'tx_busy' is already implicitly declared on line 194 [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/54F8SP_SoC_TOP.v:269]
+INFO: [Synth 8-6157] synthesizing module 'RV32IM54F8SPSoCTOP' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/54F8SP_SoC_TOP.v:1]
+INFO: [Synth 8-6157] synthesizing module 'clk_wiz_0' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.runs/synth_1/.Xil/Vivado-1393069-khwl-ThinkPad-X1-Carbon-Gen-13/realtime/clk_wiz_0_stub.v:6]
+INFO: [Synth 8-6155] done synthesizing module 'clk_wiz_0' (0#1) [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.runs/synth_1/.Xil/Vivado-1393069-khwl-ThinkPad-X1-Carbon-Gen-13/realtime/clk_wiz_0_stub.v:6]
 INFO: [Synth 8-6157] synthesizing module 'IOBUF' [/tools/Xilinx/2025.2/Vivado/scripts/rt/data/unisim_comp.v:87566]
 	Parameter DRIVE bound to: 12 - type: integer 
 	Parameter IBUF_LOW_PWR bound to: FALSE - type: string 
 	Parameter IOSTANDARD bound to: LVCMOS33 - type: string 
 	Parameter SLEW bound to: SLOW - type: string 
 INFO: [Synth 8-6155] done synthesizing module 'IOBUF' (0#1) [/tools/Xilinx/2025.2/Vivado/scripts/rt/data/unisim_comp.v:87566]
-INFO: [Synth 8-6157] synthesizing module 'ps2_rx' [/home/khwl/Desktop/SMU/Piveline/Piveline.srcs/sources_1/imports/SMU/ps2_rx.v:1]
-INFO: [Synth 8-6155] done synthesizing module 'ps2_rx' (0#1) [/home/khwl/Desktop/SMU/Piveline/Piveline.srcs/sources_1/imports/SMU/ps2_rx.v:1]
-INFO: [Synth 8-6157] synthesizing module 'char_buffer' [/home/khwl/Desktop/SMU/Piveline/Piveline.srcs/sources_1/imports/SMU/char_buffer.v:1]
-INFO: [Synth 8-6155] done synthesizing module 'char_buffer' (0#1) [/home/khwl/Desktop/SMU/Piveline/Piveline.srcs/sources_1/imports/SMU/char_buffer.v:1]
-INFO: [Synth 8-6157] synthesizing module 'font_rom' [/home/khwl/Desktop/SMU/Piveline/Piveline.srcs/sources_1/imports/SMU/font_rom.v:1]
-INFO: [Synth 8-6155] done synthesizing module 'font_rom' (0#1) [/home/khwl/Desktop/SMU/Piveline/Piveline.srcs/sources_1/imports/SMU/font_rom.v:1]
-INFO: [Synth 8-6157] synthesizing module 'vga_ctrl' [/home/khwl/Desktop/SMU/Piveline/Piveline.srcs/sources_1/imports/SMU/vga_ctrl.v:1]
-INFO: [Synth 8-6155] done synthesizing module 'vga_ctrl' (0#1) [/home/khwl/Desktop/SMU/Piveline/Piveline.srcs/sources_1/imports/SMU/vga_ctrl.v:1]
-INFO: [Synth 8-6157] synthesizing module 'rgb2dvi_0' [/home/khwl/Desktop/SMU/Piveline/Piveline.runs/synth_1/.Xil/Vivado-339092-khwl-ThinkPad-X1-Carbon-Gen-13/realtime/rgb2dvi_0_stub.v:6]
-INFO: [Synth 8-6155] done synthesizing module 'rgb2dvi_0' (0#1) [/home/khwl/Desktop/SMU/Piveline/Piveline.runs/synth_1/.Xil/Vivado-339092-khwl-ThinkPad-X1-Carbon-Gen-13/realtime/rgb2dvi_0_stub.v:6]
-INFO: [Synth 8-6155] done synthesizing module 'top' (0#1) [/home/khwl/Desktop/SMU/Piveline/Piveline.srcs/sources_1/imports/SMU/top.v:21]
-WARNING: [Synth 8-6014] Unused sequential element vga_g_reg was removed.  [/home/khwl/Desktop/SMU/Piveline/Piveline.srcs/sources_1/imports/SMU/vga_ctrl.v:55]
-WARNING: [Synth 8-3917] design top has port LED[3] driven by constant 0
+INFO: [Synth 8-6157] synthesizing module 'ps2_rx' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/ps2_rx.v:1]
+INFO: [Synth 8-6155] done synthesizing module 'ps2_rx' (0#1) [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/ps2_rx.v:1]
+INFO: [Synth 8-6157] synthesizing module 'RV32IM54F8SP' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:6]
+	Parameter XLEN bound to: 32 - type: integer 
+INFO: [Synth 8-6157] synthesizing module 'ALU' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/ALU.v:3]
+INFO: [Synth 8-6157] synthesizing module 'ALU_WORD' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/ALU_WORD.v:3]
+INFO: [Synth 8-6155] done synthesizing module 'ALU_WORD' (0#1) [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/ALU_WORD.v:3]
+INFO: [Synth 8-6157] synthesizing module 'Multiplier_WORD' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/Multiplier_WORD.v:6]
+INFO: [Synth 8-226] default block is never used [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/Multiplier_WORD.v:58]
+INFO: [Synth 8-6155] done synthesizing module 'Multiplier_WORD' (0#1) [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/Multiplier_WORD.v:6]
+INFO: [Synth 8-6157] synthesizing module 'Divider_WORD' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/Divider_WORD.v:3]
+INFO: [Synth 8-6155] done synthesizing module 'Divider_WORD' (0#1) [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/Divider_WORD.v:3]
+INFO: [Synth 8-6155] done synthesizing module 'ALU' (0#1) [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/ALU.v:3]
+INFO: [Synth 8-6157] synthesizing module 'ALUController' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/ALU_Controller.v:9]
+INFO: [Synth 8-226] default block is never used [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/ALU_Controller.v:113]
+INFO: [Synth 8-226] default block is never used [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/ALU_Controller.v:135]
+INFO: [Synth 8-226] default block is never used [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/ALU_Controller.v:149]
+INFO: [Synth 8-6155] done synthesizing module 'ALUController' (0#1) [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/ALU_Controller.v:9]
+INFO: [Synth 8-6157] synthesizing module 'BranchLogic' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/Branch_Logic.v:3]
+INFO: [Synth 8-6155] done synthesizing module 'BranchLogic' (0#1) [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/Branch_Logic.v:3]
+INFO: [Synth 8-6157] synthesizing module 'BranchPredictor' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/Branch_Predictor.v:3]
+	Parameter XLEN bound to: 32 - type: integer 
+INFO: [Synth 8-6155] done synthesizing module 'BranchPredictor' (0#1) [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/Branch_Predictor.v:3]
+INFO: [Synth 8-6157] synthesizing module 'ByteEnableLogic' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/Byte_Enable_Logic.v:4]
+INFO: [Synth 8-226] default block is never used [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/Byte_Enable_Logic.v:75]
+INFO: [Synth 8-6155] done synthesizing module 'ByteEnableLogic' (0#1) [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/Byte_Enable_Logic.v:4]
+INFO: [Synth 8-6157] synthesizing module 'ControlUnit' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/Control_Unit.v:7]
+INFO: [Synth 8-6155] done synthesizing module 'ControlUnit' (0#1) [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/Control_Unit.v:7]
+INFO: [Synth 8-6157] synthesizing module 'CSRFile' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/CSR_File.v:3]
+	Parameter XLEN bound to: 32 - type: integer 
+INFO: [Synth 8-6155] done synthesizing module 'CSRFile' (0#1) [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/CSR_File.v:3]
+INFO: [Synth 8-6157] synthesizing module 'DataMemory' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/Data_Memory.v:1]
+INFO: [Synth 8-6155] done synthesizing module 'DataMemory' (0#1) [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/Data_Memory.v:1]
+WARNING: [Synth 8-7071] port 'rom_address' of module 'DataMemory' is unconnected for instance 'data_memory' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:594]
+WARNING: [Synth 8-7023] instance 'data_memory' of module 'DataMemory' has 11 connections declared, but only 10 given [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:594]
+INFO: [Synth 8-6157] synthesizing module 'ExceptionDetector' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/Exception_Detector.v:6]
+INFO: [Synth 8-6155] done synthesizing module 'ExceptionDetector' (0#1) [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/Exception_Detector.v:6]
+INFO: [Synth 8-6157] synthesizing module 'ForwardUnit' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/Forward_Unit.v:3]
+INFO: [Synth 8-6155] done synthesizing module 'ForwardUnit' (0#1) [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/Forward_Unit.v:3]
+INFO: [Synth 8-6157] synthesizing module 'HazardUnit' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/Hazard_Unit.v:5]
+INFO: [Synth 8-6155] done synthesizing module 'HazardUnit' (0#1) [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/Hazard_Unit.v:5]
+WARNING: [Synth 8-689] width (4) of port connection 'trap_status' does not match port width (3) of module 'HazardUnit' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:705]
+INFO: [Synth 8-6157] synthesizing module 'ImmediateGenerator' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/Immediate_Generator.v:3]
+INFO: [Synth 8-6155] done synthesizing module 'ImmediateGenerator' (0#1) [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/Immediate_Generator.v:3]
+INFO: [Synth 8-6157] synthesizing module 'InstructionDecoder' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/Instruction_Decoder.v:3]
+INFO: [Synth 8-6155] done synthesizing module 'InstructionDecoder' (0#1) [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/Instruction_Decoder.v:3]
+INFO: [Synth 8-6157] synthesizing module 'InstructionMemory' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/Instruction_Memory.v:10]
+INFO: [Synth 8-3876] $readmem data file './firmware.mem' is read successfully [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/Instruction_Memory.v:45]
+INFO: [Synth 8-6155] done synthesizing module 'InstructionMemory' (0#1) [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/Instruction_Memory.v:10]
+INFO: [Synth 8-6157] synthesizing module 'ProgramCounter' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/Program_Counter.v:1]
+INFO: [Synth 8-6155] done synthesizing module 'ProgramCounter' (0#1) [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/Program_Counter.v:1]
+INFO: [Synth 8-6157] synthesizing module 'PCPlus4' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/PC_Plus_4.v:1]
+INFO: [Synth 8-6155] done synthesizing module 'PCPlus4' (0#1) [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/PC_Plus_4.v:1]
+INFO: [Synth 8-6157] synthesizing module 'PCController' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/PC_Controller.v:1]
+INFO: [Synth 8-6155] done synthesizing module 'PCController' (0#1) [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/PC_Controller.v:1]
+INFO: [Synth 8-6157] synthesizing module 'RegisterFile' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/Register_File.v:1]
+INFO: [Synth 8-6155] done synthesizing module 'RegisterFile' (0#1) [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/Register_File.v:1]
+INFO: [Synth 8-6157] synthesizing module 'TrapController' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/Trap_Controller.v:3]
+	Parameter XLEN bound to: 32 - type: integer 
+INFO: [Synth 8-6155] done synthesizing module 'TrapController' (0#1) [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/Trap_Controller.v:3]
+WARNING: [Synth 8-7071] port 'ic_clean' of module 'TrapController' is unconnected for instance 'trap_controller' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:859]
+WARNING: [Synth 8-7023] instance 'trap_controller' of module 'TrapController' has 28 connections declared, but only 27 given [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:859]
+INFO: [Synth 8-6157] synthesizing module 'IF_IO_Register' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/IF_IO_Register.v:3]
+	Parameter XLEN bound to: 32 - type: integer 
+INFO: [Synth 8-6155] done synthesizing module 'IF_IO_Register' (0#1) [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/IF_IO_Register.v:3]
+INFO: [Synth 8-6157] synthesizing module 'IO_ID_Register' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/IO_ID_Register.v:1]
+	Parameter XLEN bound to: 32 - type: integer 
+INFO: [Synth 8-6155] done synthesizing module 'IO_ID_Register' (0#1) [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/IO_ID_Register.v:1]
+INFO: [Synth 8-6157] synthesizing module 'ID_EX_Register' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/ID_EX_Register.v:1]
+	Parameter XLEN bound to: 32 - type: integer 
+INFO: [Synth 8-6155] done synthesizing module 'ID_EX_Register' (0#1) [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/ID_EX_Register.v:1]
+WARNING: [Synth 8-7071] port 'ID_is_store' of module 'ID_EX_Register' is unconnected for instance 'id_exr_register' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:938]
+WARNING: [Synth 8-7071] port 'ID_uses_rs1' of module 'ID_EX_Register' is unconnected for instance 'id_exr_register' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:938]
+WARNING: [Synth 8-7071] port 'ID_uses_rs2' of module 'ID_EX_Register' is unconnected for instance 'id_exr_register' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:938]
+WARNING: [Synth 8-7071] port 'EX_is_store' of module 'ID_EX_Register' is unconnected for instance 'id_exr_register' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:938]
+WARNING: [Synth 8-7071] port 'EX_uses_rs1' of module 'ID_EX_Register' is unconnected for instance 'id_exr_register' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:938]
+WARNING: [Synth 8-7071] port 'EX_uses_rs2' of module 'ID_EX_Register' is unconnected for instance 'id_exr_register' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:938]
+WARNING: [Synth 8-7023] instance 'id_exr_register' of module 'ID_EX_Register' has 58 connections declared, but only 52 given [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:938]
+INFO: [Synth 8-6157] synthesizing module 'EXR_EX_Register' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/EXR_EX_Register.v:1]
+	Parameter XLEN bound to: 32 - type: integer 
+INFO: [Synth 8-6155] done synthesizing module 'EXR_EX_Register' (0#1) [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/EXR_EX_Register.v:1]
+INFO: [Synth 8-6157] synthesizing module 'EX_EX2_Register' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/EX_EX2_Register.v:1]
+	Parameter XLEN bound to: 32 - type: integer 
+INFO: [Synth 8-6155] done synthesizing module 'EX_EX2_Register' (0#1) [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/EX_EX2_Register.v:1]
+WARNING: [Synth 8-7071] port 'EX_alu_zero' of module 'EX_EX2_Register' is unconnected for instance 'ex_ex2_register' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:1062]
+WARNING: [Synth 8-7071] port 'EX_alu_word_result' of module 'EX_EX2_Register' is unconnected for instance 'ex_ex2_register' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:1062]
+WARNING: [Synth 8-7071] port 'EX_input_size_word' of module 'EX_EX2_Register' is unconnected for instance 'ex_ex2_register' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:1062]
+WARNING: [Synth 8-7071] port 'EX2_alu_zero' of module 'EX_EX2_Register' is unconnected for instance 'ex_ex2_register' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:1062]
+WARNING: [Synth 8-7071] port 'EX2_alu_word_result' of module 'EX_EX2_Register' is unconnected for instance 'ex_ex2_register' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:1062]
+WARNING: [Synth 8-7071] port 'EX2_input_size_word' of module 'EX_EX2_Register' is unconnected for instance 'ex_ex2_register' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:1062]
+WARNING: [Synth 8-7023] instance 'ex_ex2_register' of module 'EX_EX2_Register' has 58 connections declared, but only 52 given [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:1062]
+INFO: [Synth 8-6157] synthesizing module 'EX_MEM_Register' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/EX_MEM_Register.v:1]
+	Parameter XLEN bound to: 32 - type: integer 
+INFO: [Synth 8-6155] done synthesizing module 'EX_MEM_Register' (0#1) [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/EX_MEM_Register.v:1]
+INFO: [Synth 8-6157] synthesizing module 'MEM_WB_Register' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/MEM_WB_Register.v:1]
+	Parameter XLEN bound to: 32 - type: integer 
+INFO: [Synth 8-6155] done synthesizing module 'MEM_WB_Register' (0#1) [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/MEM_WB_Register.v:1]
+INFO: [Synth 8-6155] done synthesizing module 'RV32IM54F8SP' (0#1) [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:6]
+INFO: [Synth 8-6157] synthesizing module 'MMIOInterface' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/MMIO_Interface.v:16]
+	Parameter XLEN bound to: 32 - type: integer 
+INFO: [Synth 8-6155] done synthesizing module 'MMIOInterface' (0#1) [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/MMIO_Interface.v:16]
+INFO: [Synth 8-6157] synthesizing module 'clint' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/CLINT.v:1]
+	Parameter CLK_FREQ bound to: 100000000 - type: integer 
+	Parameter TICK_FREQ bound to: 1000 - type: integer 
+INFO: [Synth 8-6155] done synthesizing module 'clint' (0#1) [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/CLINT.v:1]
+INFO: [Synth 8-6157] synthesizing module 'UARTTX' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/UART_TX.v:1]
+INFO: [Synth 8-6155] done synthesizing module 'UARTTX' (0#1) [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/UART_TX.v:1]
+INFO: [Synth 8-6157] synthesizing module 'VRAM' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/VRAM.v:10]
+INFO: [Synth 8-6155] done synthesizing module 'VRAM' (0#1) [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/VRAM.v:10]
+INFO: [Synth 8-6157] synthesizing module 'font_rom' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/font_rom.v:1]
+INFO: [Synth 8-3876] $readmem data file './cp437_8x16.mem' is read successfully [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/font_rom.v:10]
+INFO: [Synth 8-6155] done synthesizing module 'font_rom' (0#1) [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/font_rom.v:1]
+INFO: [Synth 8-6157] synthesizing module 'vga_ctrl' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/vga_ctrl.v:1]
+INFO: [Synth 8-6155] done synthesizing module 'vga_ctrl' (0#1) [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/vga_ctrl.v:1]
+INFO: [Synth 8-6157] synthesizing module 'rgb2dvi_0' [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.runs/synth_1/.Xil/Vivado-1393069-khwl-ThinkPad-X1-Carbon-Gen-13/realtime/rgb2dvi_0_stub.v:6]
+INFO: [Synth 8-6155] done synthesizing module 'rgb2dvi_0' (0#1) [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.runs/synth_1/.Xil/Vivado-1393069-khwl-ThinkPad-X1-Carbon-Gen-13/realtime/rgb2dvi_0_stub.v:6]
+INFO: [Synth 8-6155] done synthesizing module 'RV32IM54F8SPSoCTOP' (0#1) [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/54F8SP_SoC_TOP.v:1]
+WARNING: [Synth 8-6014] Unused sequential element branch_prediction_reg was removed.  [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/Branch_Predictor.v:35]
+WARNING: [Synth 8-6014] Unused sequential element is_timer_interrupt_reg was removed.  [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/Trap_Controller.v:77]
+WARNING: [Synth 8-6014] Unused sequential element retire_opcode_reg was removed.  [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:1243]
+WARNING: [Synth 8-6014] Unused sequential element retire_alu_result_reg was removed.  [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:1244]
+WARNING: [Synth 8-6014] Unused sequential element retire_imm_reg was removed.  [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:1245]
+WARNING: [Synth 8-6014] Unused sequential element retire_pc_plus_4_reg was removed.  [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:1246]
+WARNING: [Synth 8-6014] Unused sequential element retire_csr_read_data_reg was removed.  [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:1247]
+WARNING: [Synth 8-7129] Port EX_pc[31] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX_pc[30] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX_pc[29] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX_pc[28] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX_pc[27] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX_pc[26] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX_pc[25] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX_pc[24] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX_pc[23] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX_pc[22] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX_pc[21] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX_pc[20] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX_pc[19] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX_pc[18] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX_pc[17] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX_pc[16] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX_pc[15] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX_pc[14] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX_pc[13] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX_pc[12] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX_pc[11] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX_pc[10] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX_pc[9] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX_pc[8] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX_pc[7] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX_pc[6] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX_pc[5] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX_pc[4] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX_pc[3] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX_pc[2] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX_pc[1] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX_pc[0] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX2_pc[31] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX2_pc[30] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX2_pc[29] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX2_pc[28] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX2_pc[27] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX2_pc[26] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX2_pc[25] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX2_pc[24] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX2_pc[23] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX2_pc[22] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX2_pc[21] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX2_pc[20] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX2_pc[19] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX2_pc[18] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX2_pc[17] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX2_pc[16] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX2_pc[15] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX2_pc[14] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX2_pc[13] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX2_pc[12] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX2_pc[11] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX2_pc[10] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX2_pc[9] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX2_pc[8] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX2_pc[7] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX2_pc[6] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX2_pc[5] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX2_pc[4] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX2_pc[3] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX2_pc[2] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX2_pc[1] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port EX2_pc[0] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port WB_pc[31] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port WB_pc[30] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port WB_pc[29] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port WB_pc[28] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port WB_pc[27] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port WB_pc[26] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port WB_pc[25] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port WB_pc[24] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port WB_pc[23] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port WB_pc[22] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port WB_pc[21] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port WB_pc[20] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port WB_pc[19] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port WB_pc[18] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port WB_pc[17] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port WB_pc[16] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port WB_pc[15] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port WB_pc[14] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port WB_pc[13] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port WB_pc[12] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port WB_pc[11] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port WB_pc[10] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port WB_pc[9] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port WB_pc[8] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port WB_pc[7] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port WB_pc[6] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port WB_pc[5] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port WB_pc[4] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port WB_pc[3] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port WB_pc[2] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port WB_pc[1] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port WB_pc[0] in module TrapController is either unconnected or has no load
+WARNING: [Synth 8-7129] Port pc[31] in module InstructionMemory is either unconnected or has no load
+WARNING: [Synth 8-7129] Port pc[30] in module InstructionMemory is either unconnected or has no load
+WARNING: [Synth 8-7129] Port pc[29] in module InstructionMemory is either unconnected or has no load
+WARNING: [Synth 8-7129] Port pc[28] in module InstructionMemory is either unconnected or has no load
+INFO: [Common 17-14] Message 'Synth 8-7129' appears 100 times and further instances of the messages will be disabled. Use the Tcl command set_msg_config to change the current settings.
 ---------------------------------------------------------------------------------
-Finished RTL Elaboration : Time (s): cpu = 00:00:06 ; elapsed = 00:00:06 . Memory (MB): peak = 2634.262 ; gain = 859.844 ; free physical = 11167 ; free virtual = 30491
+Finished RTL Elaboration : Time (s): cpu = 00:00:04 ; elapsed = 00:00:04 . Memory (MB): peak = 2385.512 ; gain = 619.094 ; free physical = 7493 ; free virtual = 27046
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
 Start Handling Custom Attributes
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
-Finished Handling Custom Attributes : Time (s): cpu = 00:00:06 ; elapsed = 00:00:06 . Memory (MB): peak = 2634.262 ; gain = 859.844 ; free physical = 11176 ; free virtual = 30502
+Finished Handling Custom Attributes : Time (s): cpu = 00:00:04 ; elapsed = 00:00:04 . Memory (MB): peak = 2397.387 ; gain = 630.969 ; free physical = 7490 ; free virtual = 27045
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
-Finished RTL Optimization Phase 1 : Time (s): cpu = 00:00:06 ; elapsed = 00:00:06 . Memory (MB): peak = 2634.262 ; gain = 859.844 ; free physical = 11176 ; free virtual = 30502
+Finished RTL Optimization Phase 1 : Time (s): cpu = 00:00:04 ; elapsed = 00:00:04 . Memory (MB): peak = 2397.387 ; gain = 630.969 ; free physical = 7490 ; free virtual = 27045
 ---------------------------------------------------------------------------------
-Netlist sorting complete. Time (s): cpu = 00:00:00.26 ; elapsed = 00:00:00.25 . Memory (MB): peak = 2634.262 ; gain = 0.000 ; free physical = 10727 ; free virtual = 30492
+Netlist sorting complete. Time (s): cpu = 00:00:00.03 ; elapsed = 00:00:00.03 . Memory (MB): peak = 2403.324 ; gain = 0.000 ; free physical = 7478 ; free virtual = 27040
 INFO: [Netlist 29-17] Analyzing 2 Unisim elements for replacement
 INFO: [Netlist 29-28] Unisim Transformation completed in 0 CPU seconds
 INFO: [Project 1-570] Preparing netlist for logic optimization
 
 Processing XDC Constraints
 Initializing timing engine
-Parsing XDC File [/home/khwl/Desktop/SMU/Piveline/Piveline.gen/sources_1/ip/clk_wiz_0/clk_wiz_0/clk_wiz_0_in_context.xdc] for cell 'pll_inst'
-Finished Parsing XDC File [/home/khwl/Desktop/SMU/Piveline/Piveline.gen/sources_1/ip/clk_wiz_0/clk_wiz_0/clk_wiz_0_in_context.xdc] for cell 'pll_inst'
-Parsing XDC File [/home/khwl/Desktop/SMU/Piveline/Piveline.gen/sources_1/ip/rgb2dvi_0/rgb2dvi_0/rgb2dvi_0_in_context.xdc] for cell 'hdmi_encoder'
-Finished Parsing XDC File [/home/khwl/Desktop/SMU/Piveline/Piveline.gen/sources_1/ip/rgb2dvi_0/rgb2dvi_0/rgb2dvi_0_in_context.xdc] for cell 'hdmi_encoder'
-Parsing XDC File [/home/khwl/Desktop/SMU/Piveline/Piveline.srcs/constrs_1/imports/new/gmc_keyboard_lab01.xdc]
+Parsing XDC File [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.gen/sources_1/ip/clk_wiz_0/clk_wiz_0/clk_wiz_0_in_context.xdc] for cell 'pll_inst'
+Finished Parsing XDC File [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.gen/sources_1/ip/clk_wiz_0/clk_wiz_0/clk_wiz_0_in_context.xdc] for cell 'pll_inst'
+Parsing XDC File [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.gen/sources_1/ip/rgb2dvi_0/rgb2dvi_0/rgb2dvi_0_in_context.xdc] for cell 'hdmi_encoder'
+Finished Parsing XDC File [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.gen/sources_1/ip/rgb2dvi_0/rgb2dvi_0/rgb2dvi_0_in_context.xdc] for cell 'hdmi_encoder'
+Parsing XDC File [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/constrs_1/imports/new/gmc_keyboard_lab01.xdc]
 CRITICAL WARNING: [Constraints 18-1056] Clock 'sys_clk_pin' completely overrides clock 'CLK100MHZ'.
-New: create_clock -period 10.000 -name sys_clk_pin -waveform {0.000 5.000} [get_ports CLK100MHZ], [/home/khwl/Desktop/SMU/Piveline/Piveline.srcs/constrs_1/imports/new/gmc_keyboard_lab01.xdc:13]
-Previous: create_clock -period 10.000 [get_ports CLK100MHZ], [/home/khwl/Desktop/SMU/Piveline/Piveline.gen/sources_1/ip/clk_wiz_0/clk_wiz_0/clk_wiz_0_in_context.xdc:1]
+New: create_clock -period 10.000 -name sys_clk_pin -waveform {0.000 5.000} [get_ports CLK100MHZ], [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/constrs_1/imports/new/gmc_keyboard_lab01.xdc:12]
+Previous: create_clock -period 10.000 [get_ports CLK100MHZ], [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.gen/sources_1/ip/clk_wiz_0/clk_wiz_0/clk_wiz_0_in_context.xdc:1]
 Resolution: Review the constraint files and remove the redundant clock definition(s). If the clock constraints are not saved in a file, you can first save the constraints to an XDC file and reload the design once the constraints have been corrected.
-Finished Parsing XDC File [/home/khwl/Desktop/SMU/Piveline/Piveline.srcs/constrs_1/imports/new/gmc_keyboard_lab01.xdc]
-INFO: [Project 1-236] Implementation specific constraints were found while reading constraint file [/home/khwl/Desktop/SMU/Piveline/Piveline.srcs/constrs_1/imports/new/gmc_keyboard_lab01.xdc]. These constraints will be ignored for synthesis but will be used in implementation. Impacted constraints are listed in the file [.Xil/top_propImpl.xdc].
-Resolution: To avoid this warning, move constraints listed in [.Xil/top_propImpl.xdc] to another XDC file and exclude this new file from synthesis with the used_in_synthesis property (File Properties dialog in GUI) and re-run elaboration/synthesis.
+Finished Parsing XDC File [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/constrs_1/imports/new/gmc_keyboard_lab01.xdc]
+INFO: [Project 1-236] Implementation specific constraints were found while reading constraint file [/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.srcs/constrs_1/imports/new/gmc_keyboard_lab01.xdc]. These constraints will be ignored for synthesis but will be used in implementation. Impacted constraints are listed in the file [.Xil/RV32IM54F8SPSoCTOP_propImpl.xdc].
+Resolution: To avoid this warning, move constraints listed in [.Xil/RV32IM54F8SPSoCTOP_propImpl.xdc] to another XDC file and exclude this new file from synthesis with the used_in_synthesis property (File Properties dialog in GUI) and re-run elaboration/synthesis.
 Completed Processing XDC Constraints
 
-Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 2729.094 ; gain = 0.000 ; free physical = 11057 ; free virtual = 30522
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 2503.125 ; gain = 0.000 ; free physical = 7433 ; free virtual = 27037
 INFO: [Project 1-111] Unisim Transformation Summary:
   A total of 2 instances were transformed.
   IOBUF => IOBUF (IBUF, OBUFT): 2 instances
 
+Constraint Validation Runtime : Time (s): cpu = 00:00:00.01 ; elapsed = 00:00:00.01 . Memory (MB): peak = 2503.160 ; gain = 0.000 ; free physical = 7432 ; free virtual = 27036
+INFO: [Designutils 20-5440] No compile time benefit to using incremental synthesis; A full resynthesis will be run
+INFO: [Designutils 20-4379] Flow is switching to default flow due to incremental criteria not met. If you would like to alter this behaviour and have the flow terminate instead, please set the following parameter config_implementation {autoIncr.Synth.RejectBehavior Terminate}
+---------------------------------------------------------------------------------
+Finished Constraint Validation : Time (s): cpu = 00:00:08 ; elapsed = 00:00:08 . Memory (MB): peak = 2503.160 ; gain = 736.742 ; free physical = 7366 ; free virtual = 27062
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Loading Part and Timing Information
+---------------------------------------------------------------------------------
+Loading part: xc7a200tsbg484-1
+---------------------------------------------------------------------------------
+Finished Loading Part and Timing Information : Time (s): cpu = 00:00:08 ; elapsed = 00:00:08 . Memory (MB): peak = 2511.129 ; gain = 744.711 ; free physical = 7366 ; free virtual = 27062
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Applying 'set_property' XDC Constraints
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished applying 'set_property' XDC Constraints : Time (s): cpu = 00:00:08 ; elapsed = 00:00:08 . Memory (MB): peak = 2511.129 ; gain = 744.711 ; free physical = 7366 ; free virtual = 27063
+---------------------------------------------------------------------------------
+INFO: [Synth 8-802] inferred FSM for state register 'stage_reg' in module 'Multiplier_WORD'
+INFO: [Synth 8-802] inferred FSM for state register 'state_reg' in module 'Divider_WORD'
+INFO: [Synth 8-802] inferred FSM for state register 'trap_handle_state_reg' in module 'TrapController'
+---------------------------------------------------------------------------------------------------
+                   State |                     New Encoding |                Previous Encoding 
+---------------------------------------------------------------------------------------------------
+                  iSTATE |                             0001 |                               00
+                 iSTATE0 |                             0010 |                               01
+                 iSTATE1 |                             0100 |                               10
+                 iSTATE2 |                             1000 |                               11
+---------------------------------------------------------------------------------------------------
+INFO: [Synth 8-3354] encoded FSM with state register 'stage_reg' using encoding 'one-hot' in module 'Multiplier_WORD'
+---------------------------------------------------------------------------------------------------
+                   State |                     New Encoding |                Previous Encoding 
+---------------------------------------------------------------------------------------------------
+                    IDLE |                             0001 |                              000
+              INITIALIZE |                             0010 |                              001
+               CALCULATE |                             0100 |                              010
+                FINALIZE |                             1000 |                              011
+---------------------------------------------------------------------------------------------------
+INFO: [Synth 8-3354] encoded FSM with state register 'state_reg' using encoding 'one-hot' in module 'Divider_WORD'
+---------------------------------------------------------------------------------------------------
+                   State |                     New Encoding |                Previous Encoding 
+---------------------------------------------------------------------------------------------------
+                    IDLE |                   00000000000001 |                             0000
+               READ_MEPC |                   00000000000010 |                             0100
+             RETURN_MRET |                   00000000000100 |                             0110
+          RETURN_MRET_D1 |                   00000000001000 |                             1011
+          RETURN_MRET_D2 |                   00000000010000 |                             1100
+               GOTO_MRET |                   00000000100000 |                             1101
+             MEM_STANDBY |                   00000001000000 |                             0111
+              WB_STANDBY |                   00000010000000 |                             1000
+            RTRE_STANDBY |                   00000100000000 |                             1001
+        ECALL_MEPC_WRITE |                   00001000000000 |                             1010
+              WRITE_MEPC |                   00010000000000 |                             0001
+            WRITE_MCAUSE |                   00100000000000 |                             0010
+              READ_MTVEC |                   01000000000000 |                             0011
+              GOTO_MTVEC |                   10000000000000 |                             0101
+---------------------------------------------------------------------------------------------------
+INFO: [Synth 8-3354] encoded FSM with state register 'trap_handle_state_reg' using encoding 'one-hot' in module 'TrapController'
+---------------------------------------------------------------------------------
+Finished RTL Optimization Phase 2 : Time (s): cpu = 00:00:09 ; elapsed = 00:00:09 . Memory (MB): peak = 2511.129 ; gain = 744.711 ; free physical = 7328 ; free virtual = 27064
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start RTL Component Statistics 
+---------------------------------------------------------------------------------
+Detailed RTL Component Info : 
++---Adders : 
+	   2 Input   64 Bit       Adders := 3     
+	   3 Input   33 Bit       Adders := 1     
+	   2 Input   32 Bit       Adders := 7     
+	   3 Input   32 Bit       Adders := 1     
+	   2 Input   23 Bit       Adders := 1     
+	   2 Input   17 Bit       Adders := 1     
+	   2 Input   10 Bit       Adders := 5     
+	   2 Input    6 Bit       Adders := 1     
+	   2 Input    4 Bit       Adders := 2     
++---XORs : 
+	   2 Input     32 Bit         XORs := 1     
+	   2 Input      1 Bit         XORs := 2     
++---Registers : 
+	               64 Bit    Registers := 6     
+	               32 Bit    Registers := 66    
+	               23 Bit    Registers := 1     
+	               20 Bit    Registers := 5     
+	               17 Bit    Registers := 1     
+	               16 Bit    Registers := 1     
+	               11 Bit    Registers := 1     
+	               10 Bit    Registers := 5     
+	                8 Bit    Registers := 9     
+	                7 Bit    Registers := 7     
+	                6 Bit    Registers := 1     
+	                5 Bit    Registers := 15    
+	                4 Bit    Registers := 7     
+	                3 Bit    Registers := 14    
+	                2 Bit    Registers := 3     
+	                1 Bit    Registers := 78    
++---Multipliers : 
+	              32x32  Multipliers := 1     
++---RAMs : 
+	              64K Bit	(8192 X 8 bit)          RAMs := 4     
+	              18K Bit	(2400 X 8 bit)          RAMs := 1     
+	             1024 Bit	(32 X 32 bit)          RAMs := 1     
++---ROMs : 
+	                    ROMs := 2     
++---Muxes : 
+	   2 Input   64 Bit        Muxes := 4     
+	   4 Input   64 Bit        Muxes := 1     
+	   3 Input   64 Bit        Muxes := 1     
+	   2 Input   32 Bit        Muxes := 42    
+	   3 Input   32 Bit        Muxes := 3     
+	   4 Input   32 Bit        Muxes := 7     
+	  14 Input   32 Bit        Muxes := 2     
+	   6 Input   32 Bit        Muxes := 2     
+	   2 Input   16 Bit        Muxes := 1     
+	  14 Input   14 Bit        Muxes := 1     
+	   4 Input   14 Bit        Muxes := 1     
+	   2 Input   14 Bit        Muxes := 2     
+	   2 Input   12 Bit        Muxes := 2     
+	   5 Input   10 Bit        Muxes := 1     
+	   2 Input   10 Bit        Muxes := 4     
+	  14 Input   10 Bit        Muxes := 1     
+	   4 Input    8 Bit        Muxes := 2     
+	   4 Input    6 Bit        Muxes := 1     
+	   7 Input    5 Bit        Muxes := 2     
+	   2 Input    5 Bit        Muxes := 4     
+	   8 Input    5 Bit        Muxes := 1     
+	   2 Input    4 Bit        Muxes := 8     
+	   4 Input    4 Bit        Muxes := 1     
+	   3 Input    4 Bit        Muxes := 1     
+	   2 Input    3 Bit        Muxes := 4     
+	   5 Input    3 Bit        Muxes := 2     
+	   3 Input    3 Bit        Muxes := 3     
+	   6 Input    3 Bit        Muxes := 2     
+	   4 Input    3 Bit        Muxes := 1     
+	   8 Input    2 Bit        Muxes := 1     
+	   2 Input    2 Bit        Muxes := 7     
+	   3 Input    2 Bit        Muxes := 2     
+	   2 Input    1 Bit        Muxes := 73    
+	   4 Input    1 Bit        Muxes := 12    
+	   3 Input    1 Bit        Muxes := 5     
+	   6 Input    1 Bit        Muxes := 1     
+	  14 Input    1 Bit        Muxes := 11    
+---------------------------------------------------------------------------------
+Finished RTL Component Statistics 
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Part Resource Summary
+---------------------------------------------------------------------------------
+Part Resources:
+DSPs: 740 (col length:100)
+BRAMs: 730 (col length: RAMB18 100 RAMB36 50)
+---------------------------------------------------------------------------------
+Finished Part Resource Summary
+---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
 Start Cross Boundary and Area Optimization
 ---------------------------------------------------------------------------------
-WARNING: [Synth 8-3917] design top has port LED[3] driven by constant 0
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[1823][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[1822][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[1821][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[1820][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[1819][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[1519][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[1532][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[1531][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[1530][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[1529][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[1528][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[1527][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[1526][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[1525][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[1524][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[1523][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[1522][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[1521][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[1520][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[2116][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[2115][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[2114][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[2113][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[2112][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[2111][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[2110][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[2109][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[2108][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[2107][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[2106][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[2105][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[2104][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[2103][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[2102][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[2101][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[1234][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[1233][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[1216][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[1215][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[966][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[965][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[964][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[651][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[650][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[649][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[648][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[647][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[646][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[645][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[644][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[643][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[642][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[641][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[640][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[639][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[638][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[637][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[636][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[635][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[634][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[633][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[632][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[631][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[630][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[629][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[628][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[627][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[626][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[625][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[624][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[187][7] )
-INFO: [Synth 8-3333] propagating constant 0 across sequential element (\buffer_reg[176][7] )
+DSP Report: Generating DSP multiplier_word/mult_result, operation Mode is: A*B.
+DSP Report: operator multiplier_word/mult_result is absorbed into DSP multiplier_word/mult_result.
+DSP Report: operator multiplier_word/mult_result is absorbed into DSP multiplier_word/mult_result.
+DSP Report: Generating DSP multiplier_word/mult_result, operation Mode is: (PCIN>>17)+A*B.
+DSP Report: operator multiplier_word/mult_result is absorbed into DSP multiplier_word/mult_result.
+DSP Report: operator multiplier_word/mult_result is absorbed into DSP multiplier_word/mult_result.
+DSP Report: Generating DSP multiplier_word/mult_result, operation Mode is: A*B.
+DSP Report: operator multiplier_word/mult_result is absorbed into DSP multiplier_word/mult_result.
+DSP Report: operator multiplier_word/mult_result is absorbed into DSP multiplier_word/mult_result.
+DSP Report: Generating DSP multiplier_word/mult_result, operation Mode is: (PCIN>>17)+A*B.
+DSP Report: operator multiplier_word/mult_result is absorbed into DSP multiplier_word/mult_result.
+DSP Report: operator multiplier_word/mult_result is absorbed into DSP multiplier_word/mult_result.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[47]) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[46]) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[45]) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[44]) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[43]) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[42]) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[41]) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[40]) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[39]) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[38]) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[37]) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[36]) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[35]) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[34]) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[33]) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[32]) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[31]) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[30]) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[29]) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[28]) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[27]) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[26]) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[25]) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[24]) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[23]) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[22]) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[21]) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[20]) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[19]) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[18]) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[17]) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[47]__0) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[46]__0) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[45]__0) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[44]__0) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[43]__0) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[42]__0) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[41]__0) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[40]__0) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[39]__0) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[38]__0) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[37]__0) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[36]__0) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[35]__0) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[34]__0) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[33]__0) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[32]__0) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[31]__0) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[30]__0) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[47]__1) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[46]__1) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[45]__1) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[44]__1) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[43]__1) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[42]__1) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[41]__1) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[40]__1) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[39]__1) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[38]__1) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[37]__1) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[36]__1) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[35]__1) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[34]__1) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[33]__1) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[32]__1) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[31]__1) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[30]__1) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[29]__1) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[28]__1) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[27]__1) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[26]__1) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[25]__1) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[24]__1) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[23]__1) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[22]__1) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[21]__1) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[20]__1) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[19]__1) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[18]__1) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[17]__1) is unused and will be removed from module ALU.
+WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[47]__2) is unused and will be removed from module ALU.
 ---------------------------------------------------------------------------------
-Finished Cross Boundary and Area Optimization : Time (s): cpu = 00:00:22 ; elapsed = 00:00:29 . Memory (MB): peak = 2765.031 ; gain = 990.613 ; free physical = 5162 ; free virtual = 24614
+Finished Cross Boundary and Area Optimization : Time (s): cpu = 00:00:21 ; elapsed = 00:00:22 . Memory (MB): peak = 2520.137 ; gain = 753.719 ; free physical = 6578 ; free virtual = 26792
 ---------------------------------------------------------------------------------
+ Sort Area is  multiplier_word/mult_result_0 : 0 0 : 2701 5047 : Used 1 time 100
+ Sort Area is  multiplier_word/mult_result_0 : 0 1 : 2346 5047 : Used 1 time 100
+ Sort Area is  multiplier_word/mult_result_3 : 0 0 : 2339 4494 : Used 1 time 100
+ Sort Area is  multiplier_word/mult_result_3 : 0 1 : 2155 4494 : Used 1 time 100
 ---------------------------------------------------------------------------------
 Start ROM, RAM, DSP, Shift Register and Retiming Reporting
 ---------------------------------------------------------------------------------
 
 ROM: Preliminary Mapping Report
-+------------+------------+---------------+----------------+
-|Module Name | RTL Object | Depth x Width | Implemented As | 
-+------------+------------+---------------+----------------+
-|top         | fnt/bitmap | 2048x8        | LUT            | 
-+------------+------------+---------------+----------------+
++-------------------+------------+---------------+----------------+
+|Module Name        | RTL Object | Depth x Width | Implemented As | 
++-------------------+------------+---------------+----------------+
+|font_rom           | rom        | 4096x8        | LUT            | 
+|RV32IM54F8SPSoCTOP | p_0_out    | 4096x8        | LUT            | 
++-------------------+------------+---------------+----------------+
 
+
+Block RAM: Preliminary Mapping Report (see note below)
++-------------------+-------------------+------------------------+---+---+------------------------+---+---+------------------+--------+--------+
+|Module Name        | RTL Object        | PORT A (Depth x Width) | W | R | PORT B (Depth x Width) | W | R | Ports driving FF | RAMB18 | RAMB36 | 
++-------------------+-------------------+------------------------+---+---+------------------------+---+---+------------------+--------+--------+
+|cpu/data_memory    | memory_bank0_reg  | 8 K x 8(READ_FIRST)    | W |   | 8 K x 8(WRITE_FIRST)   |   | R | Port A and B     | 0      | 2      | 
+|cpu/data_memory    | memory_bank1_reg  | 8 K x 8(READ_FIRST)    | W |   | 8 K x 8(WRITE_FIRST)   |   | R | Port A and B     | 0      | 2      | 
+|cpu/data_memory    | memory_bank2_reg  | 8 K x 8(READ_FIRST)    | W |   | 8 K x 8(WRITE_FIRST)   |   | R | Port A and B     | 0      | 2      | 
+|cpu/data_memory    | memory_bank3_reg  | 8 K x 8(READ_FIRST)    | W |   | 8 K x 8(WRITE_FIRST)   |   | R | Port A and B     | 0      | 2      | 
+|RV32IM54F8SPSoCTOP | vram_inst/mem_reg | 2 K x 8(NO_CHANGE)     | W |   | 2 K x 8(WRITE_FIRST)   |   | R | Port A and B     | 0      | 1      | 
++-------------------+-------------------+------------------------+---+---+------------------------+---+---+------------------+--------+--------+
+
+Note: The table above is a preliminary report that shows the Block RAMs at the current stage of the synthesis flow. Some Block RAMs may be reimplemented as non Block RAM primitives later in the synthesis flow. Multiple instantiated Block RAMs are reported only once. 
+
+Distributed RAM: Preliminary Mapping Report (see note below)
++------------------+---------------+-----------+----------------------+--------------+
+|Module Name       | RTL Object    | Inference | Size (Depth x Width) | Primitives   | 
++------------------+---------------+-----------+----------------------+--------------+
+|cpu/register_file | registers_reg | Implied   | 32 x 32              | RAM32M x 12  | 
++------------------+---------------+-----------+----------------------+--------------+
+
+Note: The table above is a preliminary report that shows the Distributed RAMs at the current stage of the synthesis flow. Some Distributed RAMs may be reimplemented as non Distributed RAM primitives later in the synthesis flow. Multiple instantiated RAMs are reported only once.
+
+DSP: Preliminary Mapping Report (see note below. The ' indicates corresponding REG is set)
++------------+----------------+--------+--------+--------+--------+--------+------+------+------+------+-------+------+------+
+|Module Name | DSP Mapping    | A Size | B Size | C Size | D Size | P Size | AREG | BREG | CREG | DREG | ADREG | MREG | PREG | 
++------------+----------------+--------+--------+--------+--------+--------+------+------+------+------+-------+------+------+
+|ALU         | A*B            | 18     | 16     | -      | -      | 48     | 0    | 0    | -    | -    | -     | 0    | 0    | 
+|ALU         | (PCIN>>17)+A*B | 16     | 16     | -      | -      | 48     | 0    | 0    | -    | -    | -     | 0    | 0    | 
+|ALU         | A*B            | 18     | 18     | -      | -      | 48     | 0    | 0    | -    | -    | -     | 0    | 0    | 
+|ALU         | (PCIN>>17)+A*B | 18     | 16     | -      | -      | 48     | 0    | 0    | -    | -    | -     | 0    | 0    | 
++------------+----------------+--------+--------+--------+--------+--------+------+------+------+------+-------+------+------+
+
+Note: The table above is a preliminary report that shows the DSPs inferred at the current stage of the synthesis flow. Some DSP may be reimplemented as non DSP primitives later in the synthesis flow. Multiple instantiated DSPs are reported only once.
 ---------------------------------------------------------------------------------
 Finished ROM, RAM, DSP, Shift Register and Retiming Reporting
----------------------------------------------------------------------------------
----------------------------------------------------------------------------------
-Start Stitch Unchanged AreaOpt Partitions
----------------------------------------------------------------------------------
----------------------------------------------------------------------------------
-Finished Stitch Unchanged AreaOpt Partitions : Time (s): cpu = 00:00:43 ; elapsed = 00:00:33 . Memory (MB): peak = 2765.031 ; gain = 990.613 ; free physical = 5662 ; free virtual = 25163
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
 Start Applying XDC Timing Constraints
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
-Finished Applying XDC Timing Constraints : Time (s): cpu = 00:00:46 ; elapsed = 00:00:36 . Memory (MB): peak = 2765.031 ; gain = 990.613 ; free physical = 5625 ; free virtual = 25042
+Finished Applying XDC Timing Constraints : Time (s): cpu = 00:00:24 ; elapsed = 00:00:25 . Memory (MB): peak = 2625.074 ; gain = 858.656 ; free physical = 6538 ; free virtual = 26751
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
 Start Timing Optimization
 ---------------------------------------------------------------------------------
-info: optimization accepted worst group hill climbing move (33903.0/oG.CP 305.0ps)
 ---------------------------------------------------------------------------------
-Finished Timing Optimization : Time (s): cpu = 00:00:56 ; elapsed = 00:00:46 . Memory (MB): peak = 2855.047 ; gain = 1080.629 ; free physical = 5633 ; free virtual = 25014
+Finished Timing Optimization : Time (s): cpu = 00:00:26 ; elapsed = 00:00:26 . Memory (MB): peak = 2639.074 ; gain = 872.656 ; free physical = 6623 ; free virtual = 26757
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start ROM, RAM, DSP, Shift Register and Retiming Reporting
+---------------------------------------------------------------------------------
+
+Block RAM: Final Mapping Report
++-------------------+-------------------+------------------------+---+---+------------------------+---+---+------------------+--------+--------+
+|Module Name        | RTL Object        | PORT A (Depth x Width) | W | R | PORT B (Depth x Width) | W | R | Ports driving FF | RAMB18 | RAMB36 | 
++-------------------+-------------------+------------------------+---+---+------------------------+---+---+------------------+--------+--------+
+|cpu/data_memory    | memory_bank0_reg  | 8 K x 8(READ_FIRST)    | W |   | 8 K x 8(WRITE_FIRST)   |   | R | Port A and B     | 0      | 2      | 
+|cpu/data_memory    | memory_bank1_reg  | 8 K x 8(READ_FIRST)    | W |   | 8 K x 8(WRITE_FIRST)   |   | R | Port A and B     | 0      | 2      | 
+|cpu/data_memory    | memory_bank2_reg  | 8 K x 8(READ_FIRST)    | W |   | 8 K x 8(WRITE_FIRST)   |   | R | Port A and B     | 0      | 2      | 
+|cpu/data_memory    | memory_bank3_reg  | 8 K x 8(READ_FIRST)    | W |   | 8 K x 8(WRITE_FIRST)   |   | R | Port A and B     | 0      | 2      | 
+|RV32IM54F8SPSoCTOP | vram_inst/mem_reg | 2 K x 8(NO_CHANGE)     | W |   | 2 K x 8(WRITE_FIRST)   |   | R | Port A and B     | 0      | 1      | 
++-------------------+-------------------+------------------------+---+---+------------------------+---+---+------------------+--------+--------+
+
+
+Distributed RAM: Final Mapping Report
++------------------+---------------+-----------+----------------------+--------------+
+|Module Name       | RTL Object    | Inference | Size (Depth x Width) | Primitives   | 
++------------------+---------------+-----------+----------------------+--------------+
+|cpu/register_file | registers_reg | Implied   | 32 x 32              | RAM32M x 12  | 
++------------------+---------------+-----------+----------------------+--------------+
+
+---------------------------------------------------------------------------------
+Finished ROM, RAM, DSP, Shift Register and Retiming Reporting
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
 Start Technology Mapping
 ---------------------------------------------------------------------------------
+INFO: [Synth 8-7052] The timing for the instance cpu/data_memory/memory_bank0_reg_0 (implemented as a Block RAM) might be sub-optimal as no optional output register could be merged into the ram block. Providing additional output register may help in improving timing.
+INFO: [Synth 8-7052] The timing for the instance cpu/data_memory/memory_bank0_reg_1 (implemented as a Block RAM) might be sub-optimal as no optional output register could be merged into the ram block. Providing additional output register may help in improving timing.
+INFO: [Synth 8-7052] The timing for the instance cpu/data_memory/memory_bank1_reg_0 (implemented as a Block RAM) might be sub-optimal as no optional output register could be merged into the ram block. Providing additional output register may help in improving timing.
+INFO: [Synth 8-7052] The timing for the instance cpu/data_memory/memory_bank1_reg_1 (implemented as a Block RAM) might be sub-optimal as no optional output register could be merged into the ram block. Providing additional output register may help in improving timing.
+INFO: [Synth 8-7052] The timing for the instance cpu/data_memory/memory_bank2_reg_0 (implemented as a Block RAM) might be sub-optimal as no optional output register could be merged into the ram block. Providing additional output register may help in improving timing.
+INFO: [Synth 8-7052] The timing for the instance cpu/data_memory/memory_bank2_reg_1 (implemented as a Block RAM) might be sub-optimal as no optional output register could be merged into the ram block. Providing additional output register may help in improving timing.
+INFO: [Synth 8-7052] The timing for the instance cpu/data_memory/memory_bank3_reg_0 (implemented as a Block RAM) might be sub-optimal as no optional output register could be merged into the ram block. Providing additional output register may help in improving timing.
+INFO: [Synth 8-7052] The timing for the instance cpu/data_memory/memory_bank3_reg_1 (implemented as a Block RAM) might be sub-optimal as no optional output register could be merged into the ram block. Providing additional output register may help in improving timing.
+INFO: [Synth 8-7052] The timing for the instance cpu/instruction_memory/instruction_reg_0 (implemented as a Block RAM) might be sub-optimal as no optional output register could be merged into the ram block. Providing additional output register may help in improving timing.
+INFO: [Synth 8-7052] The timing for the instance cpu/instruction_memory/instruction_reg_0 (implemented as a Block RAM) might be sub-optimal as no optional output register could be merged into the ram block. Providing additional output register may help in improving timing.
+INFO: [Synth 8-7052] The timing for the instance cpu/instruction_memory/instruction_reg_1 (implemented as a Block RAM) might be sub-optimal as no optional output register could be merged into the ram block. Providing additional output register may help in improving timing.
+INFO: [Synth 8-7052] The timing for the instance cpu/instruction_memory/instruction_reg_1 (implemented as a Block RAM) might be sub-optimal as no optional output register could be merged into the ram block. Providing additional output register may help in improving timing.
+INFO: [Synth 8-7052] The timing for the instance vram_inst/mem_reg (implemented as a Block RAM) might be sub-optimal as no optional output register could be merged into the ram block. Providing additional output register may help in improving timing.
 ---------------------------------------------------------------------------------
-Finished Technology Mapping : Time (s): cpu = 00:00:56 ; elapsed = 00:00:50 . Memory (MB): peak = 2866.973 ; gain = 1092.555 ; free physical = 5368 ; free virtual = 24755
----------------------------------------------------------------------------------
----------------------------------------------------------------------------------
-Start Stitch Unchanged Partitions
----------------------------------------------------------------------------------
----------------------------------------------------------------------------------
-Finished Stitch Unchanged Partitions : Time (s): cpu = 00:00:57 ; elapsed = 00:00:51 . Memory (MB): peak = 2866.973 ; gain = 1092.555 ; free physical = 5497 ; free virtual = 24884
+Finished Technology Mapping : Time (s): cpu = 00:00:27 ; elapsed = 00:00:28 . Memory (MB): peak = 2757.121 ; gain = 990.703 ; free physical = 6510 ; free virtual = 26643
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
 Start IO Insertion
@@ -229,41 +703,52 @@ Start Final Netlist Cleanup
 Finished Final Netlist Cleanup
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
-Finished IO Insertion : Time (s): cpu = 00:01:00 ; elapsed = 00:00:54 . Memory (MB): peak = 2945.863 ; gain = 1171.445 ; free physical = 5543 ; free virtual = 24957
+Finished IO Insertion : Time (s): cpu = 00:00:29 ; elapsed = 00:00:29 . Memory (MB): peak = 2819.934 ; gain = 1053.516 ; free physical = 6505 ; free virtual = 26624
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
 Start Renaming Generated Instances
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
-Finished Renaming Generated Instances : Time (s): cpu = 00:01:00 ; elapsed = 00:00:54 . Memory (MB): peak = 2945.863 ; gain = 1171.445 ; free physical = 5543 ; free virtual = 24957
+Finished Renaming Generated Instances : Time (s): cpu = 00:00:29 ; elapsed = 00:00:29 . Memory (MB): peak = 2819.934 ; gain = 1053.516 ; free physical = 6505 ; free virtual = 26624
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
 Start Rebuilding User Hierarchy
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
-Finished Rebuilding User Hierarchy : Time (s): cpu = 00:01:01 ; elapsed = 00:00:55 . Memory (MB): peak = 2945.863 ; gain = 1171.445 ; free physical = 5535 ; free virtual = 24950
+Finished Rebuilding User Hierarchy : Time (s): cpu = 00:00:29 ; elapsed = 00:00:29 . Memory (MB): peak = 2819.934 ; gain = 1053.516 ; free physical = 6497 ; free virtual = 26616
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
 Start Renaming Generated Ports
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
-Finished Renaming Generated Ports : Time (s): cpu = 00:01:01 ; elapsed = 00:00:55 . Memory (MB): peak = 2945.863 ; gain = 1171.445 ; free physical = 5535 ; free virtual = 24951
+Finished Renaming Generated Ports : Time (s): cpu = 00:00:29 ; elapsed = 00:00:29 . Memory (MB): peak = 2819.934 ; gain = 1053.516 ; free physical = 6497 ; free virtual = 26616
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
 Start Handling Custom Attributes
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
-Finished Handling Custom Attributes : Time (s): cpu = 00:01:01 ; elapsed = 00:00:55 . Memory (MB): peak = 2945.863 ; gain = 1171.445 ; free physical = 5567 ; free virtual = 24982
+Finished Handling Custom Attributes : Time (s): cpu = 00:00:29 ; elapsed = 00:00:29 . Memory (MB): peak = 2825.871 ; gain = 1059.453 ; free physical = 6497 ; free virtual = 26616
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
 Start Renaming Generated Nets
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
-Finished Renaming Generated Nets : Time (s): cpu = 00:01:01 ; elapsed = 00:00:55 . Memory (MB): peak = 2945.863 ; gain = 1171.445 ; free physical = 5567 ; free virtual = 24982
+Finished Renaming Generated Nets : Time (s): cpu = 00:00:29 ; elapsed = 00:00:29 . Memory (MB): peak = 2825.871 ; gain = 1059.453 ; free physical = 6497 ; free virtual = 26616
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
 Start Writing Synthesis Report
 ---------------------------------------------------------------------------------
+
+DSP Final Report (the ' indicates corresponding REG is set)
++------------+-----------------+--------+--------+--------+--------+--------+------+------+------+------+-------+------+------+
+|Module Name | DSP Mapping     | A Size | B Size | C Size | D Size | P Size | AREG | BREG | CREG | DREG | ADREG | MREG | PREG | 
++------------+-----------------+--------+--------+--------+--------+--------+------+------+------+------+-------+------+------+
+|ALU         | A*B             | 17     | 15     | -      | -      | 48     | 0    | 0    | -    | -    | -     | 0    | 0    | 
+|ALU         | (PCIN>>17+A*B)' | 15     | 15     | -      | -      | 48     | 0    | 0    | -    | -    | -     | 0    | 1    | 
+|ALU         | A*B             | 17     | 17     | -      | -      | 48     | 0    | 0    | -    | -    | -     | 0    | 0    | 
+|ALU         | (PCIN>>17+A*B)' | 0      | 15     | -      | -      | 48     | 0    | 0    | -    | -    | -     | 0    | 1    | 
++------------+-----------------+--------+--------+--------+--------+--------+------+------+------+------+-------+------+------+
+
 
 Report BlackBoxes: 
 +------+--------------+----------+
@@ -274,54 +759,60 @@ Report BlackBoxes:
 +------+--------------+----------+
 
 Report Cell Usage: 
-+------+--------+------+
-|      |Cell    |Count |
-+------+--------+------+
-|1     |clk_wiz |     1|
-|2     |rgb2dvi |     1|
-|3     |CARRY4  |     6|
-|4     |LUT1    |    23|
-|5     |LUT2    |   124|
-|6     |LUT3    |   314|
-|7     |LUT4    |   223|
-|8     |LUT5    |   730|
-|9     |LUT6    |  6865|
-|10    |MUXF7   |  2312|
-|11    |MUXF8   |  1142|
-|12    |FDCE    | 14586|
-|13    |FDPE    |  2414|
-|14    |FDRE    |     6|
-|15    |IBUF    |     1|
-|16    |IOBUF   |     2|
-|17    |OBUF    |     8|
-+------+--------+------+
++------+---------+------+
+|      |Cell     |Count |
++------+---------+------+
+|1     |clk_wiz  |     1|
+|2     |rgb2dvi  |     1|
+|3     |CARRY4   |   210|
+|4     |DSP48E1  |     4|
+|6     |LUT1     |   233|
+|7     |LUT2     |   339|
+|8     |LUT3     |   461|
+|9     |LUT4     |   670|
+|10    |LUT5     |   540|
+|11    |LUT6     |  1422|
+|12    |MUXF7    |    76|
+|13    |MUXF8    |     8|
+|14    |RAM32M   |    10|
+|15    |RAM32X1D |     4|
+|16    |RAMB36E1 |    11|
+|20    |FDCE     |   956|
+|21    |FDPE     |    26|
+|22    |FDRE     |  1432|
+|23    |FDSE     |    85|
+|24    |IBUF     |     1|
+|25    |IOBUF    |     2|
+|26    |OBUF     |     9|
++------+---------+------+
 ---------------------------------------------------------------------------------
-Finished Writing Synthesis Report : Time (s): cpu = 00:01:01 ; elapsed = 00:00:55 . Memory (MB): peak = 2945.863 ; gain = 1171.445 ; free physical = 5567 ; free virtual = 24982
+Finished Writing Synthesis Report : Time (s): cpu = 00:00:29 ; elapsed = 00:00:29 . Memory (MB): peak = 2825.871 ; gain = 1059.453 ; free physical = 6497 ; free virtual = 26616
 ---------------------------------------------------------------------------------
-Synthesis finished with 0 errors, 0 critical warnings and 1 warnings.
-Synthesis Optimization Runtime : Time (s): cpu = 00:00:57 ; elapsed = 00:00:54 . Memory (MB): peak = 2949.777 ; gain = 1068.605 ; free physical = 10951 ; free virtual = 30364
-Synthesis Optimization Complete : Time (s): cpu = 00:01:01 ; elapsed = 00:00:57 . Memory (MB): peak = 2949.777 ; gain = 1175.359 ; free physical = 10969 ; free virtual = 30371
+Synthesis finished with 0 errors, 0 critical warnings and 271 warnings.
+Synthesis Optimization Runtime : Time (s): cpu = 00:00:27 ; elapsed = 00:00:28 . Memory (MB): peak = 2825.871 ; gain = 953.680 ; free physical = 6497 ; free virtual = 26616
+Synthesis Optimization Complete : Time (s): cpu = 00:00:29 ; elapsed = 00:00:30 . Memory (MB): peak = 2825.879 ; gain = 1059.453 ; free physical = 6497 ; free virtual = 26616
 INFO: [Project 1-571] Translating synthesized netlist
-Netlist sorting complete. Time (s): cpu = 00:00:00.09 ; elapsed = 00:00:00.1 . Memory (MB): peak = 2949.777 ; gain = 0.000 ; free physical = 10981 ; free virtual = 30383
-INFO: [Netlist 29-17] Analyzing 3462 Unisim elements for replacement
+Netlist sorting complete. Time (s): cpu = 00:00:00.02 ; elapsed = 00:00:00.02 . Memory (MB): peak = 2825.879 ; gain = 0.000 ; free physical = 6677 ; free virtual = 26796
+INFO: [Netlist 29-17] Analyzing 325 Unisim elements for replacement
 INFO: [Netlist 29-28] Unisim Transformation completed in 0 CPU seconds
-WARNING: [Netlist 29-101] Netlist 'top' is not ideal for floorplanning, since the cellview 'char_buffer' contains a large number of primitives.  Please consider enabling hierarchy in synthesis if you want to do floorplanning.
 INFO: [Project 1-570] Preparing netlist for logic optimization
 INFO: [Opt 31-138] Pushed 0 inverter(s) to 0 load pin(s).
-Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.01 . Memory (MB): peak = 3020.363 ; gain = 0.000 ; free physical = 10996 ; free virtual = 30399
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 2825.879 ; gain = 0.000 ; free physical = 6686 ; free virtual = 26805
 INFO: [Project 1-111] Unisim Transformation Summary:
-  A total of 2 instances were transformed.
+  A total of 16 instances were transformed.
   IOBUF => IOBUF (IBUF, OBUFT): 2 instances
+  RAM32M => RAM32M (RAMD32(x6), RAMS32(x2)): 10 instances
+  RAM32X1D => RAM32X1D (RAMD32(x2)): 4 instances
 
-Synth Design complete | Checksum: ea786119
+Synth Design complete | Checksum: f26b0b9c
 INFO: [Common 17-83] Releasing license: Synthesis
-110 Infos, 4 Warnings, 1 Critical Warnings and 0 Errors encountered.
+145 Infos, 216 Warnings, 1 Critical Warnings and 0 Errors encountered.
 synth_design completed successfully
-synth_design: Time (s): cpu = 00:01:06 ; elapsed = 00:01:02 . Memory (MB): peak = 3020.398 ; gain = 1397.129 ; free physical = 10999 ; free virtual = 30401
-INFO: [Common 17-2834] synth_design peak Physical Memory [PSS] (MB): overall = 5556.344; main = 2096.781; forked = 3893.140
-INFO: [Common 17-2834] synth_design peak Virtual Memory [VSS] (MB): overall = 12749.410; main = 3020.367; forked = 10000.387
+synth_design: Time (s): cpu = 00:00:34 ; elapsed = 00:00:33 . Memory (MB): peak = 2825.906 ; gain = 1202.668 ; free physical = 6686 ; free virtual = 26805
+INFO: [Common 17-2834] synth_design peak Physical Memory [PSS] (MB): overall = 1965.894; main = 1965.894; forked = 279.953
+INFO: [Common 17-2834] synth_design peak Virtual Memory [VSS] (MB): overall = 3517.215; main = 2825.875; forked = 998.082
 INFO: [runtcl-6] Synthesis results are not added to the cache due to CRITICAL_WARNING
-Write ShapeDB Complete: Time (s): cpu = 00:00:00.04 ; elapsed = 00:00:00.01 . Memory (MB): peak = 3044.375 ; gain = 0.000 ; free physical = 10992 ; free virtual = 30395
-INFO: [Common 17-1381] The checkpoint '/home/khwl/Desktop/SMU/Piveline/Piveline.runs/synth_1/top.dcp' has been generated.
-INFO: [Vivado 12-24828] Executing command : report_utilization -file top_utilization_synth.rpt -pb top_utilization_synth.pb
-INFO: [Common 17-206] Exiting Vivado at Mon Mar 23 20:25:06 2026...
+Write ShapeDB Complete: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.01 . Memory (MB): peak = 2849.883 ; gain = 0.000 ; free physical = 6686 ; free virtual = 26805
+INFO: [Common 17-1381] The checkpoint '/home/khwl/Desktop/Piveline/FPGAv2/FPGA/Piveline.runs/synth_1/RV32IM54F8SPSoCTOP.dcp' has been generated.
+INFO: [Vivado 12-24828] Executing command : report_utilization -file RV32IM54F8SPSoCTOP_utilization_synth.rpt -pb RV32IM54F8SPSoCTOP_utilization_synth.pb
+INFO: [Common 17-206] Exiting Vivado at Sat May  9 19:24:31 2026...

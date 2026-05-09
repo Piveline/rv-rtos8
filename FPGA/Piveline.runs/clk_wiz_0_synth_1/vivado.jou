@@ -3,22 +3,22 @@
 # SW Build 6299465 on Fri Nov 14 12:34:56 MST 2025
 # IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
 # SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
-# Start of session at: Mon Mar 23 19:47:14 2026
-# Process ID         : 50665
-# Current directory  : /home/khwl/Desktop/SMU/Piveline/Piveline.runs/clk_wiz_0_synth_1
+# Start of session at: Thu May  7 15:37:03 2026
+# Process ID         : 307676
+# Current directory  : /home/khwl/Downloads/smu-piveline-develop/FPGA/Piveline.runs/clk_wiz_0_synth_1
 # Command line       : vivado -log clk_wiz_0.vds -product Vivado -mode batch -messageDb vivado.pb -notrace -source clk_wiz_0.tcl
-# Log file           : /home/khwl/Desktop/SMU/Piveline/Piveline.runs/clk_wiz_0_synth_1/clk_wiz_0.vds
-# Journal file       : /home/khwl/Desktop/SMU/Piveline/Piveline.runs/clk_wiz_0_synth_1/vivado.jou
-# Running On         : khwl-ThinkPad-X1-Carbon-Gen-13
+# Log file           : /home/khwl/Downloads/smu-piveline-develop/FPGA/Piveline.runs/clk_wiz_0_synth_1/clk_wiz_0.vds
+# Journal file       : /home/khwl/Downloads/smu-piveline-develop/FPGA/Piveline.runs/clk_wiz_0_synth_1/vivado.jou
+# Running On         : khwl-main-pc
 # Platform           : Ubuntu
 # Operating System   : Ubuntu 24.04.4 LTS
-# Processor Detail   : Intel(R) Core(TM) Ultra 7 255H
-# CPU Frequency      : 1400.000 MHz
-# CPU Physical cores : 16
+# Processor Detail   : AMD Ryzen 7 5800X 8-Core Processor
+# CPU Frequency      : 4397.110 MHz
+# CPU Physical cores : 8
 # CPU Logical cores  : 16
-# Host memory        : 33110 MB
-# Swap memory        : 8589 MB
-# Total Virtual      : 41700 MB
-# Available Virtual  : 33398 MB
+# Host memory        : 16652 MB
+# Swap memory        : 4294 MB
+# Total Virtual      : 20947 MB
+# Available Virtual  : 7416 MB
 #-----------------------------------------------------------
 source clk_wiz_0.tcl -notrace
