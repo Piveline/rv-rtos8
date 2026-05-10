@@ -7,6 +7,8 @@ module TrapController #(
     input wire clk_enable,
     input wire reset,
 
+    input wire jumpped_latch,
+    input wire [XLEN-1:0] pc,
     input wire [XLEN-1:0] IF_pc,
     input wire [XLEN-1:0] IO_pc,
     input wire [XLEN-1:0] ID_pc,
@@ -53,6 +55,7 @@ localparam ECALL_MEPC_WRITE = 4'b1010;
 localparam RETURN_MRET_D1   = 4'b1011;
 localparam RETURN_MRET_D2   = 4'b1100;
 localparam GOTO_MRET       = 4'b1101;
+localparam IRQ_MEPC_WRITE   = 4'b1110;
 
 reg [3:0] trap_handle_state;
 reg [3:0] next_trap_handle_state;
@@ -174,7 +177,7 @@ always @(*) begin
                  */
                 standby_mode           = 1'b1;
                 trap_done              = 1'b0;
-                next_trap_handle_state = MEM_STANDBY;
+                next_trap_handle_state = trap_status == `TIMER_INTERRUPT_IRQ ? IRQ_MEPC_WRITE : MEM_STANDBY;
             end
 
             else begin
@@ -206,7 +209,7 @@ always @(*) begin
         RTRE_STANDBY: begin
             standby_mode           = 1'b1;
             trap_done              = 1'b0;
-            next_trap_handle_state = ECALL_MEPC_WRITE;
+            next_trap_handle_state = (latched_trap_status == `TIMER_INTERRUPT_IRQ) ? IRQ_MEPC_WRITE : ECALL_MEPC_WRITE;
         end
 
         ECALL_MEPC_WRITE: begin
@@ -217,10 +220,26 @@ always @(*) begin
             trap_csr_access        = 1'b1;
             csr_write_enable       = 1'b1;
             csr_trap_address       = 12'h341; // mepc
-            csr_trap_write_data = (EXR_pc != 32'b0) ? EXR_pc : 
-                                (ID_pc  != 32'b0) ? ID_pc : 
-                                (IO_pc != 32'b0) ? IO_pc : 
-                                (IF_pc != 32'b0) ? IF_pc : 32'b0; // Handle the case when the trap is from an instruction before EX stage
+            csr_trap_write_data = EXR_pc; // Handle the case when the trap is from an instruction before EX stage
+            trap_done              = 1'b0;
+            next_trap_handle_state = WRITE_MEPC;
+        end
+
+        IRQ_MEPC_WRITE: begin
+            /*
+             * Save interrupted PC to mepc.
+             * For your current top-level, EX_pc is connected to EXR_pc.
+             */
+            trap_csr_access        = 1'b1;
+            csr_write_enable       = 1'b1;
+            csr_trap_address       = 12'h341; // mepc
+            csr_trap_write_data = jumpped_latch ? pc : 
+                                (MEM_pc != {XLEN{1'b0}}) ? MEM_pc : 
+                                (EX2_pc != {XLEN{1'b0}}) ? EX2_pc : 
+                                (EXR_pc != {XLEN{1'b0}}) ? EXR_pc : 
+                                (ID_pc  != {XLEN{1'b0}}) ? ID_pc : 
+                                (IO_pc != {XLEN{1'b0}}) ? IO_pc : 
+                                (IF_pc != {XLEN{1'b0}}) ? IF_pc : {XLEN{1'b0}}; // Handle the case when the trap is from an instruction before EX stage
             trap_done              = 1'b0;
             next_trap_handle_state = WRITE_MEPC;
         end

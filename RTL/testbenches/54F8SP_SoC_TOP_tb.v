@@ -1,26 +1,36 @@
 // ============================================================================
 // tb_SoC_TOP — RV32IM54F8SP SoC Testbench
-// PS/2 Keyboard Input Simulation Version
+// PS/2 Keyboard Intensive Stress Simulation Version
 // ============================================================================
-// iverilog + GTKWave:
-//   $dumpvars(0, tb_SoC_TOP) 로 모든 계층의 모든 신호를 VCD에 기록합니다.
 //
-// Expected input sequence:
-//   a b c Enter
+// Usage example:
+//   ./test.sh 54F8SP_SoC_TOP.v 54F8SP_SoC_TOP_tb.v
 //
-// PS/2 Set 2 scancodes:
-//   a     = 0x1C
-//   b     = 0x32
-//   c     = 0x21
-//   Enter = 0x5A
+// Notes:
+//   - Do NOT `include the SoC TOP file here if test.sh already compiles it.
+//   - This TB avoids direct references to fragile internal keyboard FIFO signals
+//     by default, so it should not fail on missing dut.kb_fifo_full, etc.
+//   - Optional internal MMIO debug can be enabled with:
+//       iverilog -DENABLE_DUT_MMIO_DEBUG ...
+//
+// Stress phases:
+//   1. Normal commands: abc, free, uptime, echo abc
+//   2. Backspace / history
+//   3. Rapid letter burst
+//   4. Typematic-like repeated make codes
+//   5. Long line beyond MAX_CMD_LEN
+//   6. Repeated Enter
+//   7. Recovery commands
+//
 // ============================================================================
 
 `timescale 1ns / 1ps
 
 `include "./testbenches/xilinx_sim_stubs.v"
 
-// TOP module
-// 경로/파일명이 다르면 여기만 네 프로젝트에 맞게 수정하면 됨.
+// --------------------------------------------------------------------------
+// Do NOT include TOP here when test.sh already compiles 54F8SP_SoC_TOP.v.
+// --------------------------------------------------------------------------
 // `include "./modules/54F8SP_SoC_TOP.v"
 
 // SoC peripheral modules
@@ -35,25 +45,17 @@
 // CPU core top
 `include "./modules/RV32IM54F_8SP.v"
 
-// 나머지 CPU 내부 모듈들은 test.sh에서 modules/*.v로 같이 컴파일하거나,
-// 필요하면 아래에 include를 추가하면 됨.
-// 예:
-// `include "./modules/ALU.v"
-// `include "./modules/ALUController.v"
-// `include "./modules/ByteEnableLogic.v"
-// ...
-
 module tb_SoC_TOP;
 
     // ========================================================================
     // Parameters
     // ========================================================================
-    parameter CLK_PERIOD    = 10;       // 100 MHz
-    parameter SIM_TIME_US   = 50000;    // 50 ms
+    parameter CLK_PERIOD    = 10;        // 100 MHz
+    parameter SIM_TIME_US   = 250000;    // 250 ms timeout
     parameter RESET_HOLD_NS = 200;
 
     // PS/2 clock timing
-    // 30us half-period => 약 16.7kHz PS/2 clock
+    // 30us half-period => about 16.7kHz PS/2 clock
     localparam PS2_CLK_HALF = 30_000;
 
     // UART 115200 baud
@@ -84,7 +86,7 @@ module tb_SoC_TOP;
     // ========================================================================
     // PS/2 Bus Model — open-drain + pullup
     // ========================================================================
-    // PS/2는 open-drain이므로 0은 drive, 1은 release가 정석.
+    // PS/2 is open-drain: drive 0, release for 1.
     assign PS2_CLK  = ps2_clk_oe  ? ps2_clk_drive  : 1'bz;
     assign PS2_DATA = ps2_data_oe ? ps2_data_drive : 1'bz;
 
@@ -120,7 +122,7 @@ module tb_SoC_TOP;
     // VCD Dump
     // ========================================================================
     initial begin
-        $dumpfile("soc_waveform_ps2.vcd");
+        $dumpfile("soc_waveform_ps2_stress.vcd");
         $dumpvars(0, tb_SoC_TOP);
     end
 
@@ -128,10 +130,12 @@ module tb_SoC_TOP;
     // UART TX Monitor
     // ========================================================================
     integer uart_log_fd;
+    integer uart_char_count;
     reg [7:0] uart_rx_byte;
 
     initial begin
-        uart_log_fd = $fopen("uart_output.log", "w");
+        uart_log_fd     = $fopen("uart_output.log", "w");
+        uart_char_count = 0;
     end
 
     always begin
@@ -148,6 +152,8 @@ module tb_SoC_TOP;
             end
 
             #UART_BIT_PERIOD;
+
+            uart_char_count = uart_char_count + 1;
 
             if (uart_rx_byte >= 8'h20 && uart_rx_byte < 8'h7F) begin
                 $display("[UART] %0t: '%c' (0x%02h)",
@@ -190,78 +196,87 @@ module tb_SoC_TOP;
     end
 
     // ========================================================================
-    // Optional Internal Keyboard Debug Monitor
+    // Optional DUT MMIO Debug Monitor
     // ========================================================================
-    // TOP 내부 신호명이 지금 코드와 같을 때만 유효.
-    // 만약 컴파일러가 hierarchical reference를 싫어하면 이 블록을 주석 처리하면 됨.
-    /*
+    // Disabled by default to avoid elaboration errors when internal signal names
+    // differ across top-module revisions.
+    //
+    // Enable only when these internal names exist in your current TOP:
+    //   dut.sys_clk
+    //   dut.sys_reset
+    //   dut.cpu_mmio_address
+    //   dut.cpu_mmio_write_enable
+    //   dut.cpu_mmio_write_data
+    //   dut.mmio_read_data
+    //
+`ifdef ENABLE_DUT_MMIO_DEBUG
+    integer cnt_kb_stat_read;
+    integer cnt_kb_scan_read;
+    integer cnt_kb_stat_write;
+
+    reg prev_kb_stat_read;
+    reg prev_kb_scan_read;
+    reg prev_kb_stat_write;
+
+    wire kb_stat_read_now  =
+        (dut.cpu_mmio_address[31:0] == 32'h1003_0004) &&
+        !dut.cpu_mmio_write_enable;
+
+    wire kb_scan_read_now  =
+        (dut.cpu_mmio_address[31:0] == 32'h1003_0000) &&
+        !dut.cpu_mmio_write_enable;
+
+    wire kb_stat_write_now =
+        (dut.cpu_mmio_address[31:0] == 32'h1003_0004) &&
+        dut.cpu_mmio_write_enable;
+
+    initial begin
+        cnt_kb_stat_read  = 0;
+        cnt_kb_scan_read  = 0;
+        cnt_kb_stat_write = 0;
+        prev_kb_stat_read  = 1'b0;
+        prev_kb_scan_read  = 1'b0;
+        prev_kb_stat_write = 1'b0;
+    end
+
     always @(posedge dut.sys_clk) begin
-        if (!dut.sys_reset) begin
-            if (dut.scancode_valid) begin
-                $display("[KBD]  %0t: scancode_valid scancode=0x%02h",
-                    $time, dut.scancode);
+        if (dut.sys_reset) begin
+            prev_kb_stat_read  <= 1'b0;
+            prev_kb_scan_read  <= 1'b0;
+            prev_kb_stat_write <= 1'b0;
+        end
+        else begin
+            prev_kb_stat_read  <= kb_stat_read_now;
+            prev_kb_scan_read  <= kb_scan_read_now;
+            prev_kb_stat_write <= kb_stat_write_now;
+
+            if (kb_stat_read_now && !prev_kb_stat_read) begin
+                cnt_kb_stat_read = cnt_kb_stat_read + 1;
             end
 
-            if (dut.kb_cdc_pulse) begin
-                $display("[KBD]  %0t: kb_cdc_pulse", $time);
+            if (kb_scan_read_now && !prev_kb_scan_read) begin
+                cnt_kb_scan_read = cnt_kb_scan_read + 1;
+                $display("[MMIO] %0t: KB_SCAN READ rdata=0x%08h",
+                    $time, dut.mmio_read_data);
             end
 
-            if (dut.kb_fifo_push) begin
-                $display("[KBD]  %0t: FIFO PUSH data=0x%02h wr=%0d rd=%0d full=%b empty=%b",
-                    $time,
-                    dut.kb_scancode_pix,
-                    dut.kb_fifo_wr,
-                    dut.kb_fifo_rd,
-                    dut.kb_fifo_full,
-                    dut.kb_fifo_empty);
-            end
-
-            if (dut.kb_ack) begin
-                $display("[KBD]  %0t: KB ACK", $time);
-            end
-
-            if (dut.kb_fifo_pop) begin
-                $display("[KBD]  %0t: FIFO POP head=0x%02h wr=%0d rd=%0d full=%b empty=%b",
-                    $time,
-                    dut.kb_scancode_sys,
-                    dut.kb_fifo_wr,
-                    dut.kb_fifo_rd,
-                    dut.kb_fifo_full,
-                    dut.kb_fifo_empty);
+            if (kb_stat_write_now && !prev_kb_stat_write) begin
+                cnt_kb_stat_write = cnt_kb_stat_write + 1;
+                $display("[MMIO] %0t: KB_STAT WRITE wdata=0x%08h",
+                    $time, dut.cpu_mmio_write_data);
             end
         end
     end
-*/
-    // ========================================================================
-    // Optional CPU MMIO Debug Monitor
-    // ========================================================================
-    always @(posedge dut.sys_clk) begin
-        if (!dut.sys_reset) begin
-            if (dut.cpu_mmio_address[31:0] == 32'h1003_0004) begin
-                $display("[MMIO] %0t: KB_STAT addr seen, we=%b wdata=0x%08h rdata=0x%08h kb_new=%b",
-                    $time,
-                    dut.cpu_mmio_write_enable,
-                    dut.cpu_mmio_write_data,
-                    dut.mmio_read_data,
-                    dut.kb_new_data);
-            end
 
-            if (dut.cpu_mmio_address[31:0] == 32'h1003_0000) begin
-                $display("[MMIO] %0t: KB_SCAN addr seen, we=%b rdata=0x%08h scan=0x%02h",
-                    $time,
-                    dut.cpu_mmio_write_enable,
-                    dut.mmio_read_data,
-                    dut.kb_scancode_sys);
-            end
-
-            if (dut.cpu_mmio_write_enable &&
-                dut.cpu_mmio_address[31:0] == 32'h1003_0004) begin
-                $display("[MMIO] %0t: WRITE KB_STAT wdata=0x%08h",
-                    $time,
-                    dut.cpu_mmio_write_data);
-            end
-        end
+    always begin
+        #5_000_000;
+        $display("[MMIO_SUM] %0t: stat_read=%0d scan_read=%0d stat_write=%0d",
+            $time,
+            cnt_kb_stat_read,
+            cnt_kb_scan_read,
+            cnt_kb_stat_write);
     end
+`endif
 
     // ========================================================================
     // PS/2 Open-Drain Drive Helpers
@@ -301,8 +316,8 @@ module tb_SoC_TOP;
         end
     endtask
 
-    // PS/2 receiver는 보통 falling edge에서 data를 sample.
-    // 따라서 data를 먼저 안정화시키고 CLK falling edge를 만든다.
+    // PS/2 receiver normally samples data on the falling edge.
+    // So data is stabilized before pulling clock low.
     task ps2_send_bit;
         input bitval;
         begin
@@ -366,7 +381,231 @@ module tb_SoC_TOP;
     endtask
 
     // ========================================================================
-    // Main Sequence — PS/2 Input Test
+    // PS/2 Stress Input Helpers
+    // ========================================================================
+    task ps2_tap_key;
+        input [7:0] make_code;
+        input integer gap_after_ns;
+        begin
+            ps2_send_byte(make_code);
+            #50_000;
+            ps2_send_byte(8'hF0);
+            ps2_send_byte(make_code);
+            #(gap_after_ns);
+        end
+    endtask
+
+    task ps2_tap_key_fast;
+        input [7:0] make_code;
+        begin
+            ps2_send_byte(make_code);
+            #10_000;
+            ps2_send_byte(8'hF0);
+            ps2_send_byte(make_code);
+            #10_000;
+        end
+    endtask
+
+    task ps2_enter;
+        begin
+            ps2_tap_key(8'h5A, 100_000);
+        end
+    endtask
+
+    task ps2_backspace;
+        begin
+            ps2_tap_key(8'h66, 100_000);
+        end
+    endtask
+
+    task type_abc_enter;
+        begin
+            ps2_tap_key(8'h1C, 100_000); // a
+            ps2_tap_key(8'h32, 100_000); // b
+            ps2_tap_key(8'h21, 100_000); // c
+            ps2_enter();
+        end
+    endtask
+
+    task type_free_enter;
+        begin
+            ps2_tap_key(8'h2B, 80_000);  // f
+            ps2_tap_key(8'h2D, 80_000);  // r
+            ps2_tap_key(8'h24, 80_000);  // e
+            ps2_tap_key(8'h24, 80_000);  // e
+            ps2_enter();
+        end
+    endtask
+
+    task type_uptime_enter;
+        begin
+            ps2_tap_key(8'h3C, 80_000);  // u
+            ps2_tap_key(8'h4D, 80_000);  // p
+            ps2_tap_key(8'h2C, 80_000);  // t
+            ps2_tap_key(8'h43, 80_000);  // i
+            ps2_tap_key(8'h3A, 80_000);  // m
+            ps2_tap_key(8'h24, 80_000);  // e
+            ps2_enter();
+        end
+    endtask
+
+    task type_echo_abc_enter;
+        begin
+            ps2_tap_key(8'h24, 80_000);  // e
+            ps2_tap_key(8'h21, 80_000);  // c
+            ps2_tap_key(8'h33, 80_000);  // h
+            ps2_tap_key(8'h44, 80_000);  // o
+            ps2_tap_key(8'h29, 80_000);  // space
+            ps2_tap_key(8'h1C, 80_000);  // a
+            ps2_tap_key(8'h32, 80_000);  // b
+            ps2_tap_key(8'h21, 80_000);  // c
+            ps2_enter();
+        end
+    endtask
+
+    task type_history_enter;
+        begin
+            ps2_tap_key(8'h33, 80_000);  // h
+            ps2_tap_key(8'h43, 80_000);  // i
+            ps2_tap_key(8'h1B, 80_000);  // s
+            ps2_tap_key(8'h2C, 80_000);  // t
+            ps2_tap_key(8'h44, 80_000);  // o
+            ps2_tap_key(8'h2D, 80_000);  // r
+            ps2_tap_key(8'h35, 80_000);  // y
+            ps2_enter();
+        end
+    endtask
+
+    task type_backspace_test_enter;
+        begin
+            // abc -> backspace -> backspace -> de -> Enter
+            ps2_tap_key(8'h1C, 80_000);  // a
+            ps2_tap_key(8'h32, 80_000);  // b
+            ps2_tap_key(8'h21, 80_000);  // c
+            ps2_backspace();
+            ps2_backspace();
+            ps2_tap_key(8'h23, 80_000);  // d
+            ps2_tap_key(8'h24, 80_000);  // e
+            ps2_enter();
+        end
+    endtask
+
+    task type_long_line_enter;
+        integer i;
+        begin
+            // MAX_CMD_LEN=64 boundary/overflow behavior test.
+            // Firmware should ignore extra chars beyond buffer size.
+            for (i = 0; i < 90; i = i + 1) begin
+                case (i % 6)
+                    0: ps2_tap_key_fast(8'h1C); // a
+                    1: ps2_tap_key_fast(8'h32); // b
+                    2: ps2_tap_key_fast(8'h21); // c
+                    3: ps2_tap_key_fast(8'h23); // d
+                    4: ps2_tap_key_fast(8'h24); // e
+                    5: ps2_tap_key_fast(8'h2B); // f
+                endcase
+            end
+            ps2_enter();
+        end
+    endtask
+
+    task type_typematic_like_a_enter;
+        integer i;
+        begin
+            // Real keyboards repeat make codes while a key is held.
+            // Send repeated make 'a' without break, then send final break.
+            for (i = 0; i < 20; i = i + 1) begin
+                ps2_send_byte(8'h1C); // repeated make 'a'
+                #30_000;
+            end
+
+            ps2_send_byte(8'hF0);
+            ps2_send_byte(8'h1C);
+            ps2_enter();
+        end
+    endtask
+
+    task type_rapid_letter_burst_enter;
+        integer i;
+        begin
+            // Rapid burst to stress FIFO / ack / load-use / polling path.
+            for (i = 0; i < 32; i = i + 1) begin
+                case (i[2:0])
+                    3'd0: ps2_tap_key_fast(8'h1C); // a
+                    3'd1: ps2_tap_key_fast(8'h1B); // s
+                    3'd2: ps2_tap_key_fast(8'h23); // d
+                    3'd3: ps2_tap_key_fast(8'h2B); // f
+                    3'd4: ps2_tap_key_fast(8'h3B); // j
+                    3'd5: ps2_tap_key_fast(8'h42); // k
+                    3'd6: ps2_tap_key_fast(8'h4B); // l
+                    3'd7: ps2_tap_key_fast(8'h4C); // ;
+                endcase
+            end
+            ps2_enter();
+        end
+    endtask
+
+    task run_keyboard_stress_sequence;
+        integer round;
+        begin
+            $display("[TB]   %0t: === Keyboard stress sequence start ===", $time);
+
+            // Phase 1: normal commands repeated
+            for (round = 0; round < 3; round = round + 1) begin
+                $display("[TB]   %0t: Phase 1 normal round %0d", $time, round);
+                type_abc_enter();
+                #1_000_000;
+                type_free_enter();
+                #1_000_000;
+                type_uptime_enter();
+                #1_000_000;
+                type_echo_abc_enter();
+                #1_000_000;
+            end
+
+            // Phase 2: backspace / history
+            $display("[TB]   %0t: Phase 2 backspace/history", $time);
+            type_backspace_test_enter();
+            #1_000_000;
+            type_history_enter();
+            #1_000_000;
+
+            // Phase 3: rapid burst
+            $display("[TB]   %0t: Phase 3 rapid burst", $time);
+            type_rapid_letter_burst_enter();
+            #2_000_000;
+
+            // Phase 4: typematic-like repeated make
+            $display("[TB]   %0t: Phase 4 typematic-like repeat", $time);
+            type_typematic_like_a_enter();
+            #2_000_000;
+
+            // Phase 5: long line overflow boundary
+            $display("[TB]   %0t: Phase 5 long line", $time);
+            type_long_line_enter();
+            #2_000_000;
+
+            // Phase 6: repeated Enter
+            $display("[TB]   %0t: Phase 6 repeated enter", $time);
+            for (round = 0; round < 10; round = round + 1) begin
+                ps2_enter();
+                #100_000;
+            end
+
+            // Phase 7: recovery commands
+            $display("[TB]   %0t: Phase 7 recovery commands", $time);
+            type_free_enter();
+            #1_000_000;
+            type_uptime_enter();
+            #1_000_000;
+            type_abc_enter();
+
+            $display("[TB]   %0t: === Keyboard stress sequence end ===", $time);
+        end
+    endtask
+
+    // ========================================================================
+    // Main Sequence — Keyboard Stress Test
     // ========================================================================
     initial begin
         CPU_RESETN     = 1'b0;
@@ -377,9 +616,8 @@ module tb_SoC_TOP;
         ps2_data_drive = 1'b1;
 
         $display("============================================");
-        $display(" RV32IM54F8SP SoC Testbench - PS/2 MODE");
+        $display(" RV32IM54F8SP SoC Testbench - PS/2 STRESS MODE");
         $display(" Sim: %0d us (%0d ms)", SIM_TIME_US, SIM_TIME_US / 1000);
-        $display(" Input sequence: a b c Enter");
         $display("============================================");
 
         // Reset
@@ -387,40 +625,31 @@ module tb_SoC_TOP;
         CPU_RESETN = 1'b1;
         $display("[TB]   %0t: Reset released", $time);
 
-        // PLL lock 대기
+        // Wait for PLL and synchronized resets.
+        // These internal names existed in your previous TOP.
         wait (dut.pll_locked == 1'b1);
         $display("[TB]   %0t: PLL locked", $time);
 
-        // reset synchronizer release 대기
         wait (dut.sys_reset == 1'b0);
         wait (dut.pix_reset == 1'b0);
         $display("[TB]   %0t: sys/pix reset released", $time);
 
-        // --------------------------------------------------------------------
         // Fast simulation shortcut:
-        // 실제 TOP은 PS/2 inhibit를 약 200ms 걸어둠.
-        // 시뮬레이션에서는 오래 기다리지 않기 위해 강제로 inhibit_done=1 처리.
-        // --------------------------------------------------------------------
+        // Real TOP inhibits PS/2 clock for about 200ms.
+        // Force inhibit_done to avoid waiting in simulation.
         force dut.inhibit_done = 1'b1;
         $display("[TB]   %0t: Forced dut.inhibit_done = 1", $time);
 
-        // 시스템이 prompt 출력하고 shell loop에 들어갈 시간 확보
-        #5_000_000; // 5ms
+        // Give firmware time to print prompt and enter shell loop.
+        #8_000_000;
 
-        $display("[TB]   %0t: Start PS/2 keyboard input", $time);
+        run_keyboard_stress_sequence();
 
-        // Type "abc\n"
-        ps2_press_key(8'h1C); // a
-        ps2_press_key(8'h32); // b
-        ps2_press_key(8'h21); // c
-        ps2_press_key(8'h5A); // Enter
+        // Observe idle behavior after stress.
+        #20_000_000;
 
-        $display("[TB]   %0t: Keyboard input sequence done", $time);
-
-        // 입력 후 관찰 시간
-        #20_000_000; // 20ms
-
-        $display("[TB]   %0t: Test done", $time);
+        $display("[TB]   %0t: Stress test done", $time);
+        $display("[TB]   UART chars observed: %0d", uart_char_count);
         $finish;
     end
 
@@ -436,11 +665,12 @@ module tb_SoC_TOP;
     always begin
         #1_000_000;
         ms_cnt = ms_cnt + 1;
-        $display("[TB]   %0t: %0d ms | LED=0x%02h | kb_new=%b kb_full=%b",
+
+        $display("[TB]   %0t: %0d ms | LED=0x%02h | UART_CHARS=%0d",
             $time,
             ms_cnt,
             LED,
-            );
+            uart_char_count);
     end
 
     // ========================================================================
@@ -449,6 +679,7 @@ module tb_SoC_TOP;
     initial begin
         #(SIM_TIME_US * 1000);
         $display("[TB]   %0t: Timeout finish", $time);
+        $display("[TB]   UART chars observed: %0d", uart_char_count);
         $finish;
     end
 
