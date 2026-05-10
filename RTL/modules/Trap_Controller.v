@@ -16,6 +16,7 @@ module TrapController #(
     input wire [XLEN-1:0] MEM_pc,
     input wire [XLEN-1:0] WB_pc,
 
+    input wire branch_taken,
     input wire [3:0] trap_status,
     input wire [XLEN-1:0] csr_read_data,
 
@@ -193,13 +194,13 @@ always @(*) begin
         MEM_STANDBY: begin
             standby_mode           = 1'b1;
             trap_done              = 1'b0;
-            next_trap_handle_state = WB_STANDBY;
+            next_trap_handle_state = (latched_trap_status == `TRAP_ECALL && branch_taken) ? IDLE : WB_STANDBY;
         end
 
         WB_STANDBY: begin
             standby_mode           = 1'b1;
             trap_done              = 1'b0;
-            next_trap_handle_state = RTRE_STANDBY;
+            next_trap_handle_state = (latched_trap_status == `TRAP_ECALL && branch_taken) ? IDLE : RTRE_STANDBY;
         end
 
         RTRE_STANDBY: begin

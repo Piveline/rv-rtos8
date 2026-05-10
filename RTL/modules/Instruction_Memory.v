@@ -42,7 +42,7 @@ module InstructionMemory #(
 	end
 	
 	initial begin
-		$readmemh("./modules/firmware.mem", data);
+		$readmemh("./modules/firmware_new.mem", data);
 	end
 
 endmodule

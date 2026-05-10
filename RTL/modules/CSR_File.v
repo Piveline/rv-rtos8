@@ -1,4 +1,5 @@
 `include "modules/headers/csr_funct3.vh"
+`include "modules/headers/trap.vh"
 
 module CSRFile #(
     parameter XLEN = 32
@@ -16,6 +17,7 @@ module CSRFile #(
     input valid_csr_address,
     input timer_interrupt_pending,
     input pth_read,
+    input [3:0] trap_status,
 
     output reg [XLEN-1:0] csr_read_out,   // data from CSR Unit
     output reg csr_ready,              // signal to stall the process while accessing the CSR until it outputs the desired value.
@@ -128,7 +130,7 @@ module CSRFile #(
             if (instruction_retired) begin
                 minstret <= minstret + 1;
             end
-            if (trap_entry) begin
+            if (trap_entry && (trap_status != `TRAP_MRET)) begin
                 MPIE <= MIE;     
                 MIE  <= 1'b0;    
             end 
