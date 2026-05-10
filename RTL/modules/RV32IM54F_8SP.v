@@ -476,6 +476,28 @@ module RV32IM54F8SP #(
         else instruction = im_instruction;
     end
 
+    reg [XLEN-1:0] jump_target_latch;
+    reg jumpped_latch;
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            jump_target_latch <= {XLEN{1'b0}};
+            jumpped_latch <= 1'b0;
+        end
+        else if (clk_enable) begin
+            jump_target_latch <= EX2_jump ? EX2_alu_result : {XLEN{1'b0}};
+            if (standby_mode && jumpped) begin
+                jumpped_latch <= 1'b1;
+            end
+            else if (standby_mode) begin
+                jumpped_latch <= jumpped_latch;
+            end
+            else begin
+                jumpped_latch <= 1'b0;
+            end
+        end
+    end
+    wire jumpped = jump_target_latch == pc;
+
     wire [11:0] IO_csr_address = IO_instruction[31:20];
     wire IO_valid_csr_address = (IO_csr_address == 12'hB00) ||
                                (IO_csr_address == 12'hB02) ||
@@ -597,6 +619,7 @@ module RV32IM54F8SP #(
         .clk_enable(clk_enable),
         .reset(reset),
         .trapped(trapped),
+        .trap_status(trap_status),
         .csr_write_enable(csr_write_enable_source),
         .csr_read_address(csr_read_address),
         .csr_write_address(csr_write_address),
@@ -887,7 +910,10 @@ module RV32IM54F8SP #(
         .clk(clk),
         .clk_enable(clk_enable),
         .reset(reset),
+        .jumpped_latch(jumpped_latch),
         .trap_status(trap_status),
+        .branch_taken(branch_taken),
+        .pc(pc),
         .IF_pc(instruction_pc),
         .IO_pc(IO_pc),
         .ID_pc(ID_pc),

@@ -50,7 +50,7 @@ module ExceptionDetector (
     reg [3:0] MEM_trap_status;
     reg trapped_combinatorial;
     reg [3:0] trap_status_combinatorial;
-    wire timer_irq_vld=timer_interrupt && mstatus_mie && mie_mtie;
+    wire timer_irq_vld=timer_interrupt && mstatus_mie && mie_mtie && !trapped;
     always @(*) begin
         ID_trap_status = `TRAP_NONE;
         ID_trapped = 1'b0;
