@@ -1,5 +1,5 @@
 module EX_MEM_Register #(
-    parameter XLEN = 32
+    parameter XLEN = 64
 )(
     // pipeline register control signals
     input wire clk,
