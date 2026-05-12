@@ -1,5 +1,5 @@
 module RegisterFile # (
-    parameter XLEN = 32
+    parameter XLEN = 64
 )(
     input clk,                      // clock signal
     input clk_enable,
@@ -13,13 +13,13 @@ module RegisterFile # (
     output reg [XLEN-1:0] read_data2    // data from register 2
 );
 
-    reg [XLEN-1:0] registers [0:31]; // 32 registers with XLEN bits each
+    reg [XLEN-1:0] registers [0:31]; // 64 registers with XLEN bits each
 
     // Read operation
     always @(*) begin
         // Read port 1
         if (read_reg1 == 5'd0)
-            read_data1 = 32'd0;
+            read_data1 = 64'd0;
         else if (clk_enable && write_enable && write_reg == read_reg1)
             read_data1 = write_data;
         else
@@ -27,7 +27,7 @@ module RegisterFile # (
 
         // Read port 2
         if (read_reg2 == 5'd0)
-            read_data2 = 32'd0;
+            read_data2 = 64'd0;
         else if (clk_enable && write_enable && write_reg == read_reg2)
             read_data2 = write_data;
         else
