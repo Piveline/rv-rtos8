@@ -102,6 +102,7 @@ module RV32IM54F8SP #(
 
     // ALU Controller
     wire [4:0] alu_op;
+    wire input_size_word;
 
     // ALU
     wire [XLEN-1:0] alu_result;
@@ -439,7 +440,7 @@ module RV32IM54F8SP #(
         case (EXR_alu_src_B_select)
             `ALU_SRC_B_RD2:   EXR_normal_source_b = EXR_read_data2;
             `ALU_SRC_B_IMM:   EXR_normal_source_b = EXR_imm;
-            `ALU_SRC_B_SHAMT: EXR_normal_source_b = {58'b0, EXR_imm[4:0]};
+            `ALU_SRC_B_SHAMT: EXR_normal_source_b = {58'b0, EXR_imm[5:0]};
             `ALU_SRC_B_CSR:   EXR_normal_source_b = EXR_csr_read_data;
             default:           EXR_normal_source_b = {XLEN{1'b0}};
         endcase
@@ -724,7 +725,7 @@ module RV32IM54F8SP #(
         // BR/EX2 stage
         .ex2_is_load(EX2_is_load),
         .EX2_imm(EX2_imm),
-        .EX2_alu_result(EX2_alu_result),
+        .EX2_alu_result(EX2_alu_result_final),
         .EX2_csr_read_data(EX2_csr_read_data),
         .EX2_pc_plus_4(EX2_pc_plus_4),
         .EX2_forward_select(EX2_forward_select),
@@ -766,7 +767,7 @@ module RV32IM54F8SP #(
 
         // Consumer: EXR stage
         .EXR_rs1(EXR_rs1),
-        .EXR_rs2(EXR_rs2),
+        .EXR_rs2(EXR_rs2[4:0]),
         .EXR_alu_src_A_select(EXR_alu_src_A_select),
         .EXR_alu_src_B_select(EXR_alu_src_B_select),
         .EXR_opcode(EXR_opcode),
@@ -903,7 +904,7 @@ module RV32IM54F8SP #(
         .clk(clk),
         .clk_enable(clk_enable),
         .read_reg1(rs1),
-        .read_reg2(rs2),
+        .read_reg2(rs2[4:0]),
         .write_reg(WB_rd),
         .write_data(register_file_write_data),
         .write_enable(WB_register_write_enable),
@@ -1139,7 +1140,7 @@ module RV32IM54F8SP #(
         .EX_opcode(EX_opcode),
         .EX_funct3(EX_funct3),
         .EX_rs1(EX_rs1),
-        .EX_rs2(EX_rs2),
+        .EX_rs2(EX_rs2[4:0]),
         .EX_rd(EX_rd),
 
         .EX_read_data1({XLEN{1'b0}}),     // No longer used in 8-stage
@@ -1149,7 +1150,9 @@ module RV32IM54F8SP #(
         .EX_raw_imm(EX_raw_imm),
 
         .EX_csr_read_data(EX_csr_read_data),
-        .EX_alu_result(alu_result),
+
+        .EX_alu_result(alu_word_result_out),
+        .EX_input_size_word(input_size_word),
 
         .EX_branch(EX_branch),
         .EX_jump(EX_jump),
@@ -1183,7 +1186,9 @@ module RV32IM54F8SP #(
         .EX2_raw_imm(EX2_raw_imm),
 
         .EX2_csr_read_data(EX2_csr_read_data),
-        .EX2_alu_result(EX2_alu_result),
+
+        .EX2_alu_result(EX2_alu_word_result),
+        .EX2_input_size_word(EX2_input_size_word),
 
         .EX2_branch(EX2_branch),
         .EX2_jump(EX2_jump),
@@ -1210,14 +1215,14 @@ module RV32IM54F8SP #(
         .EX_opcode(EX2_opcode),
         .EX_funct3(EX2_funct3),
         .EX_rs1(EX2_rs1),
-        .EX_rs2(EX2_rs2),
+        .EX_rs2(EX2_rs2[4:0]),
         .EX_rd(EX2_rd),
         .EX_raw_imm(EX2_raw_imm),
         .EX_read_data2(EX2_read_data2),
         .EX_imm(EX2_imm),
         .EX_csr_read_data(EX2_csr_read_data),
 
-        .EX_alu_result(EX2_alu_result),
+        .EX_alu_result(EX2_alu_result_final),
 
         .MEM_pc(MEM_pc),
         .MEM_pc_plus_4(MEM_pc_plus_4),
