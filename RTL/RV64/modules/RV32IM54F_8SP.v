@@ -31,7 +31,7 @@
 `include "./modules/MEM_WB_Register.v"
 
 module RV32IM54F8SP #(
-    parameter XLEN = 32
+    parameter XLEN = 64
 )(
     input clk,
     input clk_enable,
@@ -63,7 +63,7 @@ module RV32IM54F8SP #(
     // ROM bypass signals
     wire [XLEN-1:0] rom_read_data;
 
-    assign IF_imm = {{20{IO_instruction[31]}}, IO_instruction[7], IO_instruction[30:25], IO_instruction[11:8], 1'b0};
+    assign IF_imm = {{(XLEN-13){IO_instruction[31]}}, IO_instruction[31], IO_instruction[7], IO_instruction[30:25], IO_instruction[11:8], 1'b0};
     assign IF_opcode = (IO_instruction[6:0]);
 
     // Instruction Decoder
@@ -71,7 +71,7 @@ module RV32IM54F8SP #(
     wire [2:0] funct3;
     wire [6:0] funct7;
     wire [4:0] rs1;
-    wire [4:0] rs2;
+    wire [5:0] rs2;
     wire [4:0] rd;
     wire [19:0] raw_imm;
     
@@ -119,7 +119,7 @@ module RV32IM54F8SP #(
     wire [XLEN-1:0] data_memory_read_data;
     wire [XLEN-1:0] byte_enable_logic_register_file_write_data;
     wire [XLEN-1:0] data_memory_write_data;
-    wire [3:0] write_mask;
+    wire [7:0] write_mask;
     wire write_done;
 
     // CSR File
@@ -182,7 +182,7 @@ module RV32IM54F8SP #(
     wire [XLEN-1:0] EXR_read_data1;
     wire [XLEN-1:0] EXR_read_data2;
     wire [4:0] EXR_rs1;
-    wire [4:0] EXR_rs2;
+    wire [5:0] EXR_rs2;
     wire [XLEN-1:0] EXR_imm;
     wire [XLEN-1:0] EXR_csr_read_data;
 
@@ -223,7 +223,7 @@ module RV32IM54F8SP #(
     wire [19:0] EX_raw_imm;
     wire [XLEN-1:0] EX_read_data2;
     wire [4:0] EX_rs1;
-    wire [4:0] EX_rs2;
+    wire [5:0] EX_rs2;
     wire [XLEN-1:0] EX_imm;
     wire [XLEN-1:0] EX_csr_read_data;
     wire EX_is_load;
@@ -426,7 +426,7 @@ module RV32IM54F8SP #(
         case (EXR_alu_src_A_select)
             `ALU_SRC_A_RD1: EXR_normal_source_a = EXR_read_data1;
             `ALU_SRC_A_PC:  EXR_normal_source_a = EXR_pc;
-            `ALU_SRC_A_RS1: EXR_normal_source_a = {27'b0, EXR_rs1};
+            `ALU_SRC_A_RS1: EXR_normal_source_a = {59'b0, EXR_rs1};
             default:         EXR_normal_source_a = {XLEN{1'b0}};
         endcase
 
@@ -434,7 +434,7 @@ module RV32IM54F8SP #(
         case (EXR_alu_src_B_select)
             `ALU_SRC_B_RD2:   EXR_normal_source_b = EXR_read_data2;
             `ALU_SRC_B_IMM:   EXR_normal_source_b = EXR_imm;
-            `ALU_SRC_B_SHAMT: EXR_normal_source_b = {26'b0, EXR_imm[4:0]};
+            `ALU_SRC_B_SHAMT: EXR_normal_source_b = {58'b0, EXR_imm[4:0]};
             `ALU_SRC_B_CSR:   EXR_normal_source_b = EXR_csr_read_data;
             default:           EXR_normal_source_b = {XLEN{1'b0}};
         endcase
@@ -501,8 +501,6 @@ module RV32IM54F8SP #(
     wire [11:0] IO_csr_address = IO_instruction[31:20];
     wire IO_valid_csr_address = (IO_csr_address == 12'hB00) ||
                                (IO_csr_address == 12'hB02) ||
-                               (IO_csr_address == 12'hB80) ||
-                               (IO_csr_address == 12'hB82) ||
                                (IO_csr_address == 12'hF11) ||
                                (IO_csr_address == 12'hF12) ||
                                (IO_csr_address == 12'hF14) ||
@@ -526,11 +524,13 @@ module RV32IM54F8SP #(
         .src_A(EX_src_A), 
         .src_B(EX_src_B), 
         .alu_op(alu_op),
+        .input_size_word(input_size_word),
         .div_start(div_start),
         .div_busy(div_busy),
         .mul_start(mul_start),
         .mul_busy(mul_busy),
 
+        .alu_word_result_out(alu_word_result_out),
         .alu_result(alu_result)
     );
 
@@ -548,6 +548,7 @@ module RV32IM54F8SP #(
         .load_use_hazard(load_use_hazard),
         .ex_kill(ID_EXR_flush),          // CHANGED: was ID_EX_flush
 
+        .input_size_word(input_size_word),
         .div_start(div_start),
         .mul_start(mul_start),
         .alu_op(alu_op)
