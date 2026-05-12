@@ -1,7 +1,7 @@
 `include "modules/headers/trap.vh"
  
 module TrapController #(
-    parameter XLEN = 32
+    parameter XLEN = 64
 )(
     input wire clk,
     input wire clk_enable,
