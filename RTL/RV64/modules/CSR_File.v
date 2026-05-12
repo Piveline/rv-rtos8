@@ -73,7 +73,6 @@ module CSRFile #(
             12'hB02: csr_read_data = minstret[XLEN-1:0];
             12'hF11: csr_read_data = mvendorid;
             12'hF12: csr_read_data = marchid;
-            12'hF13: csr_read_data = mimpid;
             12'hF14: csr_read_data = mhartid;
             12'h300: csr_read_data = mstatus;
             12'h301: csr_read_data = misa;
