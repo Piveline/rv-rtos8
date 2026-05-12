@@ -106,6 +106,11 @@ module RV32IM54F8SP #(
     // ALU
     wire [XLEN-1:0] alu_result;
     wire alu_zero;
+    wire [31:0] alu_word_result_out;
+    wire [31:0] EX2_alu_word_result;
+    wire EX2_input_size_word;
+    wire EX2_is_muldiv_word = (EX2_opcode == `OPCODE_RTYPE_WORD) && EX2_instruction[25];
+    wire [XLEN-1:0] EX2_alu_result_final = (EX2_input_size_word && !EX2_is_muldiv_word) ? {{32{EX2_alu_word_result[31]}}, EX2_alu_word_result} : EX2_alu_result;
 
     // Divider Unit
     wire div_start;
