@@ -133,12 +133,21 @@ module RV64IM72F8SPSoCTOP #(
     );
  
     // ========================================================================
-    // 6. PS/2 CDC - pixel_clk → sys_clk
+    // 6. PS/2 CDC - pixel_clk → sys_clk + 8-entry Inline FIFO
     // ========================================================================
- 
+    //
+    // 동작 흐름:
+    //   pixel_clk 도메인: scancode_valid 펄스마다 toggle 반전 + scancode 래치
+    //   sys_clk   도메인: toggle CDC → 엣지 감지 → FIFO push
+    //   CPU 읽기: KB_SCAN = FIFO head, KB_STAT[0] = !empty
+    //   CPU 쓰기: KB_STAT에 1 write → FIFO pop (acknowledge)
+    //
+    // ========================================================================
+
+    // --- pixel_clk 도메인: scancode 래치 + toggle ---
     reg [7:0] kb_scancode_pix;
     reg       kb_toggle_pix;
- 
+
     always @(posedge pixel_clk or posedge pix_reset) begin
         if (pix_reset) begin
             kb_scancode_pix <= 8'h00;
@@ -148,32 +157,62 @@ module RV64IM72F8SPSoCTOP #(
             kb_toggle_pix   <= ~kb_toggle_pix;
         end
     end
- 
+
+    // --- sys_clk 도메인: toggle CDC + 엣지 감지 ---
     reg [1:0] kb_toggle_sync;
     reg       kb_toggle_prev;
-    reg [7:0] kb_scancode_sys;
-    reg       kb_new_data;
- 
-    wire kb_ack;
- 
+
     always @(posedge sys_clk or posedge sys_reset) begin
         if (sys_reset) begin
             kb_toggle_sync <= 2'b00;
             kb_toggle_prev <= 1'b0;
-            kb_scancode_sys <= 8'h00;
-            kb_new_data     <= 1'b0;
         end else begin
             kb_toggle_sync <= {kb_toggle_sync[0], kb_toggle_pix};
             kb_toggle_prev <= kb_toggle_sync[1];
- 
-            if (kb_toggle_sync[1] != kb_toggle_prev) begin
-                kb_scancode_sys <= kb_scancode_pix;
-                kb_new_data     <= 1'b1;
-            end
- 
-            if (kb_ack)
-                kb_new_data <= 1'b0;
         end
+    end
+
+    wire kb_cdc_pulse = (kb_toggle_sync[1] != kb_toggle_prev);
+
+    // --- 8-entry inline FIFO (distributed RAM, 별도 모듈 없음) ---
+    //
+    // 주의: Vivado distributed RAM 추론 조건
+    //   - memory write는 async reset이 없는 always @(posedge clk) 블록에 있어야 함
+    //   - pointer 로직과 memory write를 분리해야 정상 합성됨
+    //
+    wire kb_ack;    // ← MMIO KB_STAT write (pop)
+
+    (* ram_style = "distributed" *) reg [7:0] kb_fifo_mem [0:7];
+    reg [3:0] kb_fifo_wr;   // [3]=wrap bit, [2:0]=address
+    reg [3:0] kb_fifo_rd;
+
+    wire kb_fifo_empty = (kb_fifo_wr == kb_fifo_rd);
+    wire kb_fifo_full  = (kb_fifo_wr[3] != kb_fifo_rd[3]) &&
+                         (kb_fifo_wr[2:0] == kb_fifo_rd[2:0]);
+
+    wire       kb_fifo_push = kb_cdc_pulse && !kb_fifo_full;
+    wire       kb_fifo_pop  = kb_ack && !kb_fifo_empty;
+
+    wire [7:0] kb_scancode_sys = kb_fifo_mem[kb_fifo_rd[2:0]];  // → MMIO
+    wire       kb_new_data     = ~kb_fifo_empty;                 // → MMIO
+
+    // (A) pointer 로직: async reset 포함
+    always @(posedge sys_clk or posedge sys_reset) begin
+        if (sys_reset) begin
+            kb_fifo_wr <= 4'd0;
+            kb_fifo_rd <= 4'd0;
+        end else begin
+            if (kb_fifo_push)
+                kb_fifo_wr <= kb_fifo_wr + 4'd1;
+            if (kb_fifo_pop)
+                kb_fifo_rd <= kb_fifo_rd + 4'd1;
+        end
+    end
+
+    // (B) memory write: async reset 없음 — Vivado distributed RAM 추론 필수 조건
+    always @(posedge sys_clk) begin
+        if (kb_fifo_push)
+            kb_fifo_mem[kb_fifo_wr[2:0]] <= kb_scancode_pix;
     end
  
     // ========================================================================

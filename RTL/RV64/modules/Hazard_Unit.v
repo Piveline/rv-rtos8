@@ -218,7 +218,7 @@ module HazardUnit (
         end
 
         if (mret_done) begin
-            IF_IO_stall = 1'b1;
+            IF_IO_stall  = 1'b1;
         end
 
         if (standby_mode) begin
