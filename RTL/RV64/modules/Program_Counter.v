@@ -1,5 +1,5 @@
 module ProgramCounter #(
-    parameter XLEN = 32
+    parameter XLEN = 64
 )(
     input clk,
     input clk_enable,
