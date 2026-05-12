@@ -81,7 +81,7 @@ always @(*) begin
     case (read_address)
         64'h0000_0000_0200_0000: read_data = mtime[XLEN-1:0];     // MTIME low
         64'h0000_0000_0200_0008: read_data = mtimecmp[XLEN-1:0];  // MTIMECMP lowq
-        default:       read_data = XLEN{1'b0};
+        default: read_data = {XLEN{1'b0}};
     endcase
 end
  
