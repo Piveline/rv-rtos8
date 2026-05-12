@@ -7,6 +7,8 @@ module TrapController #(
     input wire clk_enable,
     input wire reset,
 
+    input wire jump,
+    input wire EX_jump,
     input wire jumpped_latch,
     input wire [XLEN-1:0] pc,
     input wire [XLEN-1:0] IF_pc,
@@ -177,9 +179,10 @@ always @(*) begin
                  * ECALL / timer interrupt detected before final trap entry.
                  * Drain pipeline first, then save mepc/mcause.
                  */
-                standby_mode           = 1'b1;
-                trap_done              = 1'b0;
-                next_trap_handle_state = trap_status == `TIMER_INTERRUPT_IRQ ? IRQ_MEPC_WRITE : MEM_STANDBY;
+                standby_mode           = (trap_status == `TRAP_ECALL && (branch_taken || EX_jump)) ? 1'b0 : 1'b1;
+                trap_done              = (trap_status == `TRAP_ECALL && (branch_taken || EX_jump)) ? 1'b1 : 1'b0;
+                next_trap_handle_state = trap_status == `TIMER_INTERRUPT_IRQ ? IRQ_MEPC_WRITE : 
+                                        (trap_status == `TRAP_ECALL && (branch_taken || EX_jump)) ? IDLE : MEM_STANDBY;
             end
 
             else begin
@@ -197,15 +200,15 @@ always @(*) begin
         end
 
         MEM_STANDBY: begin
-            standby_mode           = 1'b1;
-            trap_done              = 1'b0;
-            next_trap_handle_state = (latched_trap_status == `TRAP_ECALL && branch_taken) ? IDLE : WB_STANDBY;
+            standby_mode           = (latched_trap_status == `TRAP_ECALL && (branch_taken || jump)) ? 1'b0 : 1'b1;
+            trap_done              = (latched_trap_status == `TRAP_ECALL && (branch_taken || jump)) ? 1'b1 : 1'b0;
+            next_trap_handle_state = (latched_trap_status == `TRAP_ECALL && (branch_taken || jump)) ? IDLE : WB_STANDBY;
         end
 
         WB_STANDBY: begin
             standby_mode           = 1'b1;
             trap_done              = 1'b0;
-            next_trap_handle_state = (latched_trap_status == `TRAP_ECALL && branch_taken) ? IDLE : RTRE_STANDBY;
+            next_trap_handle_state = (latched_trap_status == `TRAP_ECALL && (branch_taken || jump)) ? IDLE : RTRE_STANDBY;
         end
 
         RTRE_STANDBY: begin
@@ -341,7 +344,6 @@ always @(*) begin
             csr_trap_address       = 12'h341; // mepc
             trap_target            = {csr_read_data[XLEN-1:2], 2'b00};
             trap_done              = 1'b1;
-            mret_executed          = 1'b1;
             pth_read               = 1'b1;
             next_trap_handle_state = RETURN_MRET_D1;
         end
@@ -351,7 +353,6 @@ always @(*) begin
             csr_trap_address       = 12'h341; // mepc
             trap_target            = {csr_read_data[XLEN-1:2], 2'b00};
             trap_done              = 1'b1;
-            mret_executed          = 1'b1;
             pth_read               = 1'b1;
             next_trap_handle_state = RETURN_MRET_D2;
         end
@@ -361,7 +362,6 @@ always @(*) begin
             csr_trap_address       = 12'h341; // mepc
             trap_target            = {csr_read_data[XLEN-1:2], 2'b00};
             trap_done              = 1'b1;
-            mret_executed          = 1'b1;
             pth_read               = 1'b1;
             next_trap_handle_state = GOTO_MRET;
         end

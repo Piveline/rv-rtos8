@@ -72,9 +72,6 @@ module ExceptionDetector (
                     else if (raw_imm[0]) begin
                         ID_trap_status = `TRAP_EBREAK;
                     end
-                    else if (raw_imm == 12'b0) begin
-                        ID_trap_status = `TRAP_ECALL;
-                    end
                 end
                 else begin
                     ID_trapped = 1'b0;
@@ -115,9 +112,6 @@ module ExceptionDetector (
                     else if (EXR_raw_imm[0]) begin
                         EXR_trap_status = `TRAP_EBREAK;
                     end
-                    else if (EXR_raw_imm == 12'b0) begin
-                        EXR_trap_status = `TRAP_ECALL;
-                    end
                 end
                 else begin
                     EXR_trapped = 1'b0;
@@ -142,9 +136,6 @@ module ExceptionDetector (
                     end
                     else if (EX_raw_imm[0]) begin
                         EX_trap_status = `TRAP_EBREAK;
-                    end
-                    else if (EX_raw_imm == 12'b0) begin
-                        EX_trap_status = `TRAP_ECALL;
                     end
                 end
                 else begin
@@ -200,6 +191,24 @@ module ExceptionDetector (
         EX2_trap_status = `TRAP_NONE;
 
         case (EX2_opcode)
+        `OPCODE_ENVIRONMENT: begin // EBREAK, ECALL, MRET
+                if (EX2_funct3 == 3'b0) begin
+                        EX2_trapped = 1'b1;
+                    if (EX2_raw_imm == 12'b0011_0000_0010) begin
+                        EX2_trap_status = `TRAP_MRET;
+                    end
+                    else if (EX2_raw_imm[0]) begin
+                        EX2_trap_status = `TRAP_EBREAK;
+                    end
+                    else if (EX2_raw_imm == 12'b0) begin
+                        EX2_trap_status = `TRAP_ECALL;
+                    end
+                end
+                else begin
+                    EX2_trapped = 1'b0;
+                    EX2_trap_status = `TRAP_NONE;
+                end
+            end
             `OPCODE_STORE: begin
                 case (EX2_funct3)
                     `STORE_SH: begin

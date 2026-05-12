@@ -1,9 +1,0 @@
-System Initialized.
-Input: PS/2 keyboard MMIO 0x10030000
-
-RV64> ab
-unknown: ab
-
-RV64> 
-
-RV64> f

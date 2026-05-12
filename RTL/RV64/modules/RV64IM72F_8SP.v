@@ -504,6 +504,28 @@ module RV64IM72F8SP #(
     end
     wire jumpped = jump_target_latch == pc;
 
+    reg [XLEN-1:0] trap_target_latch;
+    reg trapped_latch;
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            trap_target_latch <= {XLEN{1'b0}};
+            trapped_latch <= 1'b0;
+        end
+        else if (clk_enable) begin
+            trap_target_latch <= (trapped || goto_mtvec) ? trap_target : {XLEN{1'b0}};
+            if (standby_mode && trapped) begin
+                trapped_latch <= 1'b1;
+            end
+            else if (standby_mode) begin
+                trapped_latch <= trapped_latch;
+            end
+            else begin
+                trapped_latch <= 1'b0;
+            end
+        end
+    end
+    wire trap_handled = trap_target_latch == pc;
+
     wire [11:0] IO_csr_address = IO_instruction[31:20];
     wire IO_valid_csr_address = (IO_csr_address == 12'hB00) ||
                                (IO_csr_address == 12'hB02) ||
@@ -626,6 +648,7 @@ module RV64IM72F8SP #(
         .clk_enable(clk_enable),
         .reset(reset),
         .trapped(trapped),
+        .trapped_latch(trapped_latch),
         .trap_status(trap_status),
         .csr_write_enable(csr_write_enable_source),
         .csr_read_address(csr_read_address),
@@ -918,6 +941,8 @@ module RV64IM72F8SP #(
         .clk(clk),
         .clk_enable(clk_enable),
         .reset(reset),
+        .EX_jump(EX_jump),
+        .jump(EX2_jump),
         .jumpped_latch(jumpped_latch),
         .trap_status(trap_status),
         .branch_taken(branch_taken),
