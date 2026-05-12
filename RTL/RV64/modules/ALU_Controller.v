@@ -1,10 +1,10 @@
-`include "./modules/headers/alu_op.vh"
-`include "./modules/headers/branch_funct3.vh"
-`include "./modules/headers/csr_funct3.vh"
-`include "./modules/headers/itype_funct3.vh"
-`include "./modules/headers/opcode.vh"
-`include "./modules/headers/rtype_funct3.vh"
-`include "./modules/headers/rtype_mul_funct3.vh"
+`include "./alu_op.vh"
+`include "./branch_funct3.vh"
+`include "./csr_funct3.vh"
+`include "./itype_funct3.vh"
+`include "./opcode.vh"
+`include "./rtype_funct3.vh"
+`include "./rtype_mul_funct3.vh"
 
 module ALUController (
 	input clk,
@@ -21,6 +21,7 @@ module ALUController (
 	input ex_kill,                  // EX-stage instruction squashed (flush)
 
     output reg [4:0] alu_op,		// ALU operation signal
+    output input_size_word,         // signal indicating if input for ALU is WORD or DWORD
 	output div_start,
 	output mul_start
 );
@@ -28,7 +29,7 @@ module ALUController (
 	wire is_div;
 	reg div_inflight;
 
-	assign is_div = (opcode == `OPCODE_RTYPE) && (funct7_0) &&
+	assign is_div = ((opcode == `OPCODE_RTYPE) || (opcode == `OPCODE_RTYPE_WORD)) && (funct7_0) &&
 					((funct3 == `RTYPE_DIV) ||
 					(funct3 == `RTYPE_DIVU) ||
 					(funct3 == `RTYPE_REM) ||
@@ -41,7 +42,7 @@ module ALUController (
 	wire is_mul;
 	reg mul_inflight;
 
-	assign is_mul = (opcode == `OPCODE_RTYPE) && (funct7_0) &&
+	assign is_mul = ((opcode == `OPCODE_RTYPE) || (opcode == `OPCODE_RTYPE_WORD)) && (funct7_0) &&
 					((funct3 == `RTYPE_MUL) ||
 					(funct3 == `RTYPE_MULH) ||
 					(funct3 == `RTYPE_MULHSU) ||
@@ -49,6 +50,8 @@ module ALUController (
 
 	// Gate mul_start with !load_use_hazard and !ex_kill to ensure operands are ready
 	assign mul_start = is_mul && !mul_inflight && !ex_kill;
+
+    assign input_size_word = ((opcode == `OPCODE_ITYPE_WORD) || (opcode == `OPCODE_RTYPE_WORD));
 
 	// Division inflight state machine
 	always @(posedge clk or posedge reset) begin
@@ -109,7 +112,7 @@ module ALUController (
 					default: alu_op = `ALU_OP_NOP;
 				endcase
 			end
-			`OPCODE_ITYPE: begin
+			`OPCODE_ITYPE, `OPCODE_ITYPE_WORD: begin
 				case (funct3)
 					`ITYPE_ADDI: alu_op = `ALU_OP_ADD;
 					`ITYPE_SLLI: alu_op = `ALU_OP_SLL;
@@ -129,7 +132,7 @@ module ALUController (
 					default: alu_op = `ALU_OP_NOP;
 				endcase
 			end 
-			`OPCODE_RTYPE: begin
+			`OPCODE_RTYPE, `OPCODE_RTYPE_WORD: begin
 				
 				if (funct7_0) begin // M extension operations
 					case (funct3)
