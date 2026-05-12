@@ -1,7 +1,7 @@
 `include "./modules/headers/opcode.vh"
 
 module IF_IO_Register #(
-    parameter XLEN = 32
+    parameter XLEN = 64   
 )(
     // pipeline register control signals
     input wire clk,
@@ -31,7 +31,7 @@ reg flush_reg;
 reg is_load_use_hazard;
 reg branch_estimation_reg;
 wire is_store = (EX2_opcode == `OPCODE_STORE);
-wire is_m_extend = (ID_opcode == `OPCODE_RTYPE) && (ID_funct7 == 7'b000_0001);
+wire is_m_extend = (ID_opcode == `OPCODE_RTYPE || ID_opcode == `OPCODE_RTYPE_WORD) && (ID_funct7 == 7'b000_0001);
 
 
 always @(posedge clk) begin
