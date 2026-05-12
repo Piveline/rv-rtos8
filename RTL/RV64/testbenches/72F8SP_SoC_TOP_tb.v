@@ -43,7 +43,7 @@
 `include "./modules/vga_ctrl.v"
 
 // CPU core top
-`include "./modules/RV32IM54F_8SP.v"
+`include "./modules/RV64IM72F_8SP.v"
 
 module tb_SoC_TOP;
 
@@ -102,7 +102,7 @@ module tb_SoC_TOP;
     // ========================================================================
     // DUT
     // ========================================================================
-    RV32IM54F8SPSoCTOP #(.XLEN(32)) dut (
+    RV64IM72F8SPSoCTOP #(.XLEN(64)) dut (
         .CLK100MHZ       (CLK100MHZ),
         .CPU_RESETN      (CPU_RESETN),
 
@@ -616,7 +616,7 @@ module tb_SoC_TOP;
         ps2_data_drive = 1'b1;
 
         $display("============================================");
-        $display(" RV32IM54F8SP SoC Testbench - PS/2 STRESS MODE");
+        $display(" RV64IM72F8SP SoC Testbench - PS/2 STRESS MODE");
         $display(" Sim: %0d us (%0d ms)", SIM_TIME_US, SIM_TIME_US / 1000);
         $display("============================================");
 
