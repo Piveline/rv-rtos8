@@ -1,5 +1,5 @@
 module EXR_EX_Register #(
-    parameter XLEN = 32
+    parameter XLEN = 64
 ) (
     input wire clk,
     input wire clk_enable,
