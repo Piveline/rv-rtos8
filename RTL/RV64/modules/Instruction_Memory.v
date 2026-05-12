@@ -8,7 +8,7 @@
 `include "./modules/headers/csr_funct3.vh"
 
 module InstructionMemory #(
-    parameter XLEN = 32
+    parameter XLEN = 64
 )(
 	input clk,
 	input clk_enable,
@@ -33,8 +33,7 @@ module InstructionMemory #(
 	always @(posedge clk) begin
 		if (clk_enable && !read_stall) begin
 			if (rom_access) begin
-				rom_read_data <= data[rom_address[15:2]];
-			end
+				rom_read_data <= {data[{rom_address[15:3], 1'b1}], data[{rom_address[15:3], 1'b0}]};			end
 			else begin
 				rom_read_data <= {XLEN{1'b0}};
 			end
