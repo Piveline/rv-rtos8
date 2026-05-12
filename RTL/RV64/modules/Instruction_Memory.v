@@ -41,7 +41,7 @@ module InstructionMemory #(
 	end
 	
 	initial begin
-		$readmemh("./modules/firmware_tasks.mem", data);
+		$readmemh("./modules/firmware_RV64.mem", data);
 	end
 
 endmodule

@@ -66,11 +66,11 @@ module MMIOInterface #(
         if (hit_clint)
             mmio_read_data = clint_read_data;
         else if (hit_uart_stat)
-            mmio_read_data = {63'b0, uart_busy};
+            mmio_read_data = {31'b0, uart_busy, 32'b0};
         else if (hit_kb_scan)
             mmio_read_data = {56'b0, kb_scancode};
         else if (hit_kb_stat)
-            mmio_read_data = {63'b0, kb_new_data};
+            mmio_read_data = {31'b0, kb_new_data, 32'b0};
         else
             mmio_read_data = {XLEN{1'b0}};
     end

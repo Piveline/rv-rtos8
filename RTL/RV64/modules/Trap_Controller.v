@@ -38,7 +38,8 @@ module TrapController #(
     output reg standby_mode,
     output reg mret_executed,
     output reg pth_read,
-    output reg goto_mtvec
+    output reg goto_mtvec,
+    output reg mret_done
 );
 
 localparam IDLE             = 4'b0000;
@@ -147,6 +148,7 @@ always @(*) begin
     next_trap_handle_state       = trap_handle_state;
     goto_mtvec                    = 1'b0;
     pth_read                     = 1'b0;
+    mret_done                   = 1'b0;
 
     case (trap_handle_state)
 
@@ -373,6 +375,7 @@ always @(*) begin
             pth_read               = 1'b1;
             next_trap_handle_state = IDLE;
             pth_done_flush         = 1'b1;
+            mret_done               = 1'b1;
         end
 
         default: begin

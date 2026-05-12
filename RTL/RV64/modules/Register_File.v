@@ -10,8 +10,13 @@ module RegisterFile # (
     input write_enable,             // enabling signal for writing register
 
     output reg [XLEN-1:0] read_data1,   // data from register 1
-    output reg [XLEN-1:0] read_data2    // data from register 2
+    output reg [XLEN-1:0] read_data2,    // data from register 2
+    output wire [XLEN-1:0] ra,
+    output wire [XLEN-1:0] sp
 );
+
+    assign ra = registers[1]; // x1 is the return address register (RA)
+    assign sp = registers[2]; // x2 is the stack pointer register (SP)
 
     reg [XLEN-1:0] registers [0:31]; // 64 registers with XLEN bits each
 

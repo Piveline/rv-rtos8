@@ -764,6 +764,7 @@ module RV64IM72F8SP #(
         .misaligned_memory_flush(misaligned_memory_flush),
         .pth_done_flush(pth_done_flush),
         .csr_ready(csr_ready),
+        .mret_done(mret_done),
 
         // Consumer: EXR stage
         .EXR_rs1(EXR_rs1),
@@ -944,7 +945,8 @@ module RV64IM72F8SP #(
         .csr_trap_write_data(csr_trap_write_data),
         .mret_executed(mret_executed),
         .pth_read(pth_read),
-        .goto_mtvec(goto_mtvec)
+        .goto_mtvec(goto_mtvec),
+        .mret_done(mret_done)
     );
 
     // =========================================================================
