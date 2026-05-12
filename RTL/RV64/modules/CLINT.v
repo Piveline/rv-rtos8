@@ -1,4 +1,5 @@
 module clint #(
+    parameter XLEN = 64,
     parameter CLK_FREQ  = 100_000_000,  // CPU 클럭 주파수: 100MHz
     parameter TICK_FREQ = 1_000         // 1초당 tick 횟수: 1000번
                                         // DIVIDER = 100_000_000 / 1_000 = 100_000
@@ -8,12 +9,12 @@ module clint #(
  
     // 입력
     input  wire        write_enable,
-    input  wire [31:0] write_data,
-    input  wire [31:0] write_address,
-    input  wire [31:0] read_address,
+    input  wire [XLEN-1:0] write_data,
+    input  wire [XLEN-1:0] write_address,
+    input  wire [XLEN-1:0] read_address,
 
     // 출력
-    output reg  [31:0] read_data,
+    output reg  [XLEN-1:0] read_data,
     output wire        timer_interrupt
 );
  
@@ -49,8 +50,7 @@ always @(posedge clk) begin
         mtime <= 64'b0;
     end else if (write_enable) begin
         case (write_address)
-            32'h0200_0000: mtime[31:0]  <= write_data;  // low 쓰기
-            32'h0200_0004: mtime[63:32] <= write_data;  // high 쓰기
+            64'h0000_0000_0200_0000: mtime[XLEN-1:0]  <= write_data;  // high 쓰기
             default: ;
         endcase
     end else if (tick) begin
@@ -68,8 +68,7 @@ always @(posedge clk) begin
         mtimecmp <= 64'hFFFF_FFFF_FFFF_FFFF;  // 초기값: 최댓값
     end else if (write_enable) begin
         case (write_address)
-            32'h0200_0008: mtimecmp[31:0]  <= write_data;  // low 쓰기
-            32'h0200_000C: mtimecmp[63:32] <= write_data;  // high 쓰기
+            64'h0000_0000_0200_0008: mtimecmp[XLEN-1:0]  <= write_data;  // low 쓰기
             default: ;
         endcase
     end
@@ -80,11 +79,9 @@ end
 // ============================================================
 always @(*) begin
     case (read_address)
-        32'h0200_0000: read_data = mtime[31:0];     // MTIME low
-        32'h0200_0004: read_data = mtime[63:32];    // MTIME high
-        32'h0200_0008: read_data = mtimecmp[31:0];  // MTIMECMP low
-        32'h0200_000C: read_data = mtimecmp[63:32]; // MTIMECMP high
-        default:       read_data = 32'b0;
+        64'h0000_0000_0200_0000: read_data = mtime[XLEN-1:0];     // MTIME low
+        64'h0000_0000_0200_0008: read_data = mtimecmp[XLEN-1:0];  // MTIMECMP lowq
+        default:       read_data = XLEN{1'b0};
     endcase
 end
  
