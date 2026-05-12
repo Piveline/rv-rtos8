@@ -1,4 +1,4 @@
-`include "./alu_op.vh"
+`include "./modules/headers/alu_op.vh"
 
 module ALU_DWORD #(
     parameter XLEN = 64
