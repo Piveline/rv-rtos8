@@ -14,7 +14,7 @@
 // ============================================================================
 
 module MMIOInterface #(
-    parameter XLEN = 32
+    parameter XLEN = 64
 )(
     input clk,
     input clk_enable,
@@ -34,7 +34,7 @@ module MMIOInterface #(
     output reg        uart_tx_start,
 
     // --- CLINT ---
-    input [31:0]      clint_read_data,
+    input [XLEN-1:0]      clint_read_data,
     output wire       clint_we,
 
     // --- VRAM ---
@@ -52,12 +52,12 @@ module MMIOInterface #(
     // Address Decode - region hit signals
     // ========================================================================
     wire hit_clint     = (address[31:16] == 16'h0200);
-    wire hit_uart_tx   = (address == 32'h1001_0000);
-    wire hit_uart_stat = (address == 32'h1001_0004);
+    wire hit_uart_tx   = (address == 64'h0000_0000_1001_0000);
+    wire hit_uart_stat = (address == 64'h0000_0000_1001_0004);
     wire hit_vram      = (address[31:16] == 16'h1002) &&
                          (address[15:0]  <  16'h0960);
-    wire hit_kb_scan   = (address == 32'h1003_0000);
-    wire hit_kb_stat   = (address == 32'h1003_0004);
+    wire hit_kb_scan   = (address == 64'h0000_0000_1003_0000);
+    wire hit_kb_stat   = (address == 64'h0000_0000_1003_0004);
 
     // ========================================================================
     // Read Mux (combinational)
@@ -66,11 +66,11 @@ module MMIOInterface #(
         if (hit_clint)
             mmio_read_data = clint_read_data;
         else if (hit_uart_stat)
-            mmio_read_data = {31'b0, uart_busy};
+            mmio_read_data = {63'b0, uart_busy};
         else if (hit_kb_scan)
-            mmio_read_data = {24'b0, kb_scancode};
+            mmio_read_data = {56'b0, kb_scancode};
         else if (hit_kb_stat)
-            mmio_read_data = {31'b0, kb_new_data};
+            mmio_read_data = {63'b0, kb_new_data};
         else
             mmio_read_data = {XLEN{1'b0}};
     end
@@ -103,11 +103,15 @@ module MMIOInterface #(
     assign vram_addr = address[11:0];
 
     always @(*) begin
-        case (address[1:0])
-            2'b00: vram_data = write_data[7:0];
-            2'b01: vram_data = write_data[15:8];
-            2'b10: vram_data = write_data[23:16];
-            2'b11: vram_data = write_data[31:24];
+        case (address[2:0])
+            3'b000: vram_data = write_data[7:0];
+            3'b001: vram_data = write_data[15:8];
+            3'b010: vram_data = write_data[23:16];
+            3'b011: vram_data = write_data[31:24];
+            3'b100: vram_data = write_data[39:32];
+            3'b101: vram_data = write_data[47:40];
+            3'b110: vram_data = write_data[55:48];
+            3'b111: vram_data = write_data[63:56];
         endcase
     end
 
