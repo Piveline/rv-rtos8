@@ -1,5 +1,5 @@
-module RV32IM54F8SPSoCTOP #(
-    parameter XLEN = 32
+module RV64IM72F8SPSoCTOP #(
+    parameter XLEN = 64
 )(
     input  wire        CLK100MHZ,
     input  wire        CPU_RESETN,
@@ -187,7 +187,7 @@ module RV32IM54F8SPSoCTOP #(
     wire            timer_interrupt;
     wire [XLEN-1:0] mmio_read_data;
  
-    RV32IM54F8SP #(.XLEN(XLEN)) cpu (
+    RV64IM72F8SP #(.XLEN(XLEN)) cpu (
         .clk                        (sys_clk),
         .clk_enable                 (cpu_clk_enable),
         .reset                      (sys_reset),
@@ -211,7 +211,7 @@ module RV32IM54F8SPSoCTOP #(
     wire [7:0]  vram_data;
     wire [7:0]  uart_tx_data;
     wire        uart_tx_start;
-    wire [31:0] clint_read_data;
+    wire [XLEN-1:0] clint_read_data;
  
     MMIOInterface #(.XLEN(XLEN)) mmio (
         .clk            (sys_clk),
