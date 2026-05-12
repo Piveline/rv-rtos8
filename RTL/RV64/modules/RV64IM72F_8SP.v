@@ -30,7 +30,7 @@
 `include "./modules/EX_MEM_Register.v"
 `include "./modules/MEM_WB_Register.v"
 
-module RV32IM54F8SP #(
+module RV64IM72F8SP #(
     parameter XLEN = 64
 )(
     input clk,
