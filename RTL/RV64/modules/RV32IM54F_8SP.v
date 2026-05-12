@@ -1150,14 +1150,14 @@ module RV32IM54F8SP #(
         .EX_raw_imm(EX_raw_imm),
 
         .EX_csr_read_data(EX_csr_read_data),
-
-        .EX_alu_result(alu_word_result_out),
-        .EX_input_size_word(input_size_word),
+        .EX_alu_result(alu_result),
 
         .EX_branch(EX_branch),
         .EX_jump(EX_jump),
         .EX_branch_estimation(EX_branch_estimation),
         .EX_is_load(EX_is_load),
+        .EX_alu_word_result(alu_word_result_out),
+        .EX_input_size_word(input_size_word),
         .EX_forward_select(EX_forward_select),
 
         // Outputs to EX2/BR stage
@@ -1186,14 +1186,14 @@ module RV32IM54F8SP #(
         .EX2_raw_imm(EX2_raw_imm),
 
         .EX2_csr_read_data(EX2_csr_read_data),
-
-        .EX2_alu_result(EX2_alu_word_result),
-        .EX2_input_size_word(EX2_input_size_word),
+        .EX2_alu_result(EX2_alu_result),
 
         .EX2_branch(EX2_branch),
         .EX2_jump(EX2_jump),
         .EX2_branch_estimation(EX2_branch_estimation),
         .EX2_is_load(EX2_is_load),
+        .EX2_alu_word_result(EX2_alu_word_result),
+        .EX2_input_size_word(EX2_input_size_word),
         .EX2_forward_select(EX2_forward_select)
     );
 
