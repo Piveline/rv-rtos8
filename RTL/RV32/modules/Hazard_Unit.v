@@ -48,6 +48,7 @@ module HazardUnit (
     input wire [4:0] retire_rd,
     input wire EX2_jump,
     input wire branch_prediction_miss,
+    input wire mret_done,
 
     output reg [1:0] hazard_ex,     // NEW: EX-EXR (non-ALU only)
     output reg [1:0] hazard_ex2,    // BR-EXR (was EX2→EX)
@@ -214,6 +215,10 @@ module HazardUnit (
             EX_EX2_flush = 1'b1;
             EX_MEM_flush = 1'b1;
             MEM_WB_flush = 1'b1;
+        end
+
+        if (mret_done) begin
+            IF_IO_stall = 1'b1;
         end
 
         if (standby_mode) begin

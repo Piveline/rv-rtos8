@@ -65,15 +65,13 @@ module ExceptionDetector (
 
             `OPCODE_ENVIRONMENT: begin // EBREAK, ECALL, MRET
                 if (ID_funct3 == 3'b0) begin
-                        ID_trapped = 1'b1;
                     if (raw_imm == 12'b0011_0000_0010) begin
                         ID_trap_status = `TRAP_MRET;
+                        ID_trapped = 1'b1;
                     end
                     else if (raw_imm[0]) begin
                         ID_trap_status = `TRAP_EBREAK;
-                    end
-                    else if (raw_imm == 12'b0) begin
-                        ID_trap_status = `TRAP_ECALL;
+                        ID_trapped = 1'b1;
                     end
                 end
                 else begin
@@ -108,15 +106,13 @@ module ExceptionDetector (
         case (EXR_opcode)
             `OPCODE_ENVIRONMENT: begin // EBREAK, ECALL, MRET
                 if (EXR_funct3 == 3'b0) begin
-                        EXR_trapped = 1'b1;
                     if (EXR_raw_imm == 12'b0011_0000_0010) begin
                         EXR_trap_status = `TRAP_MRET;
+                        EXR_trapped = 1'b1;
                     end
                     else if (EXR_raw_imm[0]) begin
                         EXR_trap_status = `TRAP_EBREAK;
-                    end
-                    else if (EXR_raw_imm == 12'b0) begin
-                        EXR_trap_status = `TRAP_ECALL;
+                        EXR_trapped = 1'b1;
                     end
                 end
                 else begin
@@ -142,9 +138,6 @@ module ExceptionDetector (
                     end
                     else if (EX_raw_imm[0]) begin
                         EX_trap_status = `TRAP_EBREAK;
-                    end
-                    else if (EX_raw_imm == 12'b0) begin
-                        EX_trap_status = `TRAP_ECALL;
                     end
                 end
                 else begin
@@ -200,6 +193,26 @@ module ExceptionDetector (
         EX2_trap_status = `TRAP_NONE;
 
         case (EX2_opcode)
+        `OPCODE_ENVIRONMENT: begin // EBREAK, ECALL, MRET
+                if (EX2_funct3 == 3'b0) begin
+                    if (EX2_raw_imm == 12'b0011_0000_0010) begin
+                        EX2_trap_status = `TRAP_MRET;
+                        EX2_trapped = 1'b1;
+                    end
+                    else if (EX2_raw_imm[0]) begin
+                        EX2_trap_status = `TRAP_EBREAK;
+                        EX2_trapped = 1'b1;
+                    end
+                    else if (EX2_raw_imm == 12'b0) begin
+                        EX2_trap_status = `TRAP_ECALL;
+                        EX2_trapped = 1'b1;
+                    end
+                end
+                else begin
+                    EX2_trapped = 1'b0;
+                    EX2_trap_status = `TRAP_NONE;
+                end
+            end
             `OPCODE_STORE: begin
                 case (EX2_funct3)
                     `STORE_SH: begin
