@@ -41,7 +41,7 @@ module InstructionMemory #(
 	end
 	
 	initial begin
-		$readmemh("./modules/firmware_RV64_rhealstone.mem", data);
+		$readmemh("./modules/firmware_RV64_rheal_up.mem", data);
 	end
 
 endmodule

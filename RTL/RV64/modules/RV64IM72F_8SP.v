@@ -375,8 +375,45 @@ module RV64IM72F8SP #(
     wire [XLEN-1:0] store_forward_data;
     wire store_forward_enable;
     wire [XLEN-1:0] EXR_read_data2_MUX;
-    assign EXR_read_data2_MUX = store_forward_enable ? store_forward_data : EXR_read_data2;
+    //assign EXR_read_data2_MUX = store_forward_enable ? store_forward_data : EXR_read_data2;
     wire [2:0] EX2_forward_select;
+
+    wire EXR_is_store_instr = (EXR_opcode == `OPCODE_STORE);
+
+    reg [XLEN-1:0] EXR_store_data_hold;
+    reg            EXR_store_data_hold_valid;
+
+    wire EXR_store_advances =
+        EXR_is_store_instr &&
+        !EXR_EX_stall &&
+        !EXR_EX_flush;
+
+    wire [XLEN-1:0] EXR_store_data_resolved =
+        store_forward_enable       ? store_forward_data :
+        EXR_store_data_hold_valid  ? EXR_store_data_hold :
+                                    EXR_read_data2;
+
+    assign EXR_read_data2_MUX =
+        EXR_is_store_instr ? EXR_store_data_resolved : EXR_read_data2;
+
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            EXR_store_data_hold       <= {XLEN{1'b0}};
+            EXR_store_data_hold_valid <= 1'b0;
+        end
+        else if (clk_enable) begin
+            if (ID_EXR_flush || !EXR_is_store_instr) begin
+                EXR_store_data_hold_valid <= 1'b0;
+            end
+            else if (EXR_store_advances) begin
+                EXR_store_data_hold_valid <= 1'b0;
+            end
+            else if (store_forward_enable) begin
+                EXR_store_data_hold       <= store_forward_data;
+                EXR_store_data_hold_valid <= 1'b1;
+            end
+        end
+    end
 
     // WB->MEM store data forwarding
     wire [XLEN-1:0] store_wb_to_mem_forward_data;

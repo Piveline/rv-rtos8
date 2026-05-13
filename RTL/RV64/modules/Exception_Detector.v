@@ -65,12 +65,13 @@ module ExceptionDetector (
 
             `OPCODE_ENVIRONMENT: begin // EBREAK, ECALL, MRET
                 if (ID_funct3 == 3'b0) begin
-                        ID_trapped = 1'b1;
                     if (raw_imm == 12'b0011_0000_0010) begin
                         ID_trap_status = `TRAP_MRET;
+                        ID_trapped = 1'b1;
                     end
                     else if (raw_imm[0]) begin
                         ID_trap_status = `TRAP_EBREAK;
+                        ID_trapped = 1'b1;
                     end
                 end
                 else begin
@@ -105,12 +106,13 @@ module ExceptionDetector (
         case (EXR_opcode)
             `OPCODE_ENVIRONMENT: begin // EBREAK, ECALL, MRET
                 if (EXR_funct3 == 3'b0) begin
-                        EXR_trapped = 1'b1;
                     if (EXR_raw_imm == 12'b0011_0000_0010) begin
                         EXR_trap_status = `TRAP_MRET;
+                        EXR_trapped = 1'b1;
                     end
                     else if (EXR_raw_imm[0]) begin
                         EXR_trap_status = `TRAP_EBREAK;
+                        EXR_trapped = 1'b1;
                     end
                 end
                 else begin
@@ -193,15 +195,17 @@ module ExceptionDetector (
         case (EX2_opcode)
         `OPCODE_ENVIRONMENT: begin // EBREAK, ECALL, MRET
                 if (EX2_funct3 == 3'b0) begin
-                        EX2_trapped = 1'b1;
                     if (EX2_raw_imm == 12'b0011_0000_0010) begin
                         EX2_trap_status = `TRAP_MRET;
+                        EX2_trapped = 1'b1;
                     end
                     else if (EX2_raw_imm[0]) begin
                         EX2_trap_status = `TRAP_EBREAK;
+                        EX2_trapped = 1'b1;
                     end
                     else if (EX2_raw_imm == 12'b0) begin
                         EX2_trap_status = `TRAP_ECALL;
+                        EX2_trapped = 1'b1;
                     end
                 end
                 else begin

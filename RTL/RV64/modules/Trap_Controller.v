@@ -179,10 +179,10 @@ always @(*) begin
                  * ECALL / timer interrupt detected before final trap entry.
                  * Drain pipeline first, then save mepc/mcause.
                  */
-                standby_mode           = (trap_status == `TRAP_ECALL && (branch_taken || EX_jump)) ? 1'b0 : 1'b1;
-                trap_done              = (trap_status == `TRAP_ECALL && (branch_taken || EX_jump)) ? 1'b1 : 1'b0;
+                standby_mode           = (trap_status == `TRAP_ECALL && (branch_taken || jumpped_latch)) ? 1'b0 : 1'b1;
+                trap_done              = (trap_status == `TRAP_ECALL && (branch_taken || jumpped_latch)) ? 1'b1 : 1'b0;
                 next_trap_handle_state = trap_status == `TIMER_INTERRUPT_IRQ ? IRQ_MEPC_WRITE : 
-                                        (trap_status == `TRAP_ECALL && (branch_taken || EX_jump)) ? IDLE : ECALL_MEPC_WRITE;
+                                        (trap_status == `TRAP_ECALL && (branch_taken || jumpped_latch)) ? IDLE : ECALL_MEPC_WRITE;
             end
 
             else begin

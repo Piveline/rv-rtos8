@@ -1,6 +1,6 @@
 // ============================================================================
-// tb_SoC_TOP — RV32IM54F8SP SoC Testbench
-// PS/2 Keyboard Intensive Stress Simulation Version
+// tb_SoC_TOP — RV64IM72F8SP SoC Testbench
+// PS/2 Keyboard Mash TURBO Stress Version
 // ============================================================================
 //
 // Usage example:
@@ -13,14 +13,14 @@
 //   - Optional internal MMIO debug can be enabled with:
 //       iverilog -DENABLE_DUT_MMIO_DEBUG ...
 //
-// Stress phases:
-//   1. Normal commands: abc, free, uptime, echo abc
-//   2. Backspace / history
-//   3. Rapid letter burst
-//   4. Typematic-like repeated make codes
-//   5. Long line beyond MAX_CMD_LEN
-//   6. Repeated Enter
-//   7. Recovery commands
+// Stress goal:
+//   Aggressively inject the same keyboard-mash payload with very short intervals:
+//     asdlkifgjnas;lodfgihasdgo;pihjsdo;pig
+//   using realistic make/break taps, make-only bursts, repeated Enter storms,
+//   and immediate recovery commands.
+//
+//   This is meant to reproduce failures where typing 3+ characters quickly
+//   causes the shell/SoC to restart or lose keyboard input.
 //
 // ============================================================================
 
@@ -51,12 +51,19 @@ module tb_SoC_TOP;
     // Parameters
     // ========================================================================
     parameter CLK_PERIOD    = 10;        // 100 MHz
-    parameter SIM_TIME_US   = 250000;    // 250 ms timeout
+    parameter SIM_TIME_US   = 5000000;   // 5.0 s timeout for intensive keyboard RTL simulation
     parameter RESET_HOLD_NS = 200;
 
     // PS/2 clock timing
-    // 30us half-period => about 16.7kHz PS/2 clock
-    localparam PS2_CLK_HALF = 30_000;
+    // TURBO mode for RTL stress: 2us half-period => 250kHz PS/2 clock.
+    // This is intentionally much faster than a real PS/2 keyboard.
+    // It is useful for exposing FIFO/ack/polling/stack-corruption bugs quickly.
+    // If your ps2_rx has a very slow debounce/filter, try 5_000 first.
+    localparam PS2_CLK_HALF = 2_000;
+
+    // Remove most inter-byte idle delay in turbo mode.
+    localparam PS2_BYTE_PRE_IDLE  = 1_000;
+    localparam PS2_BYTE_POST_IDLE = 1_000;
 
     // UART 115200 baud
     localparam UART_BIT_PERIOD = 8680;
@@ -121,21 +128,38 @@ module tb_SoC_TOP;
     // ========================================================================
     // VCD Dump
     // ========================================================================
-    /*initial begin
-        $dumpfile("soc_waveform_ps2_stress.vcd");
+    initial begin
+        $dumpfile("soc_waveform_keyboard_mash_intensive.vcd");
         $dumpvars(0, tb_SoC_TOP);
-    end*/
-
+    end
+/*
+    initial begin
+        $dumpfile("cpu_core_only.vcd");
+        $dumpvars(0, tb_SoC_TOP.dut.cpu);
+    end
+*/
     // ========================================================================
     // UART TX Monitor
     // ========================================================================
     integer uart_log_fd;
     integer uart_char_count;
+    integer boot_banner_count;
+    integer stress_error_count;
     reg [7:0] uart_rx_byte;
+    reg [8*64-1:0] uart_recent;
+    reg [8*19-1:0] uart_recent19;
+    reg stress_active;
+
+    localparam [8*19-1:0] BOOT_BANNER = "System Initialized.";
 
     initial begin
-        uart_log_fd     = $fopen("uart_output.log", "w");
-        uart_char_count = 0;
+        uart_log_fd       = $fopen("uart_output_keyboard_mash.log", "w");
+        uart_char_count   = 0;
+        boot_banner_count = 0;
+        stress_error_count = 0;
+        uart_recent       = {8*64{1'b0}};
+        uart_recent19     = {8*19{1'b0}};
+        stress_active     = 1'b0;
     end
 
     always begin
@@ -171,6 +195,22 @@ module tb_SoC_TOP;
 
             if (uart_log_fd != 0) begin
                 $fwrite(uart_log_fd, "%c", uart_rx_byte);
+            end
+
+            // Shift recent UART stream for simple reboot/banner detection.
+            uart_recent   = {uart_recent[8*63-1:0], uart_rx_byte};
+            uart_recent19 = {uart_recent19[8*18-1:0], uart_rx_byte};
+
+            if (uart_recent19 == BOOT_BANNER) begin
+                boot_banner_count = boot_banner_count + 1;
+                $display("[TB]   %0t: Boot banner observed count=%0d",
+                    $time, boot_banner_count);
+
+                if (stress_active && boot_banner_count > 1) begin
+                    stress_error_count = stress_error_count + 1;
+                    $display("[TB][ERR] %0t: Possible reset/restart during keyboard mash stress!",
+                        $time);
+                end
             end
         end
     end
@@ -338,7 +378,7 @@ module tb_SoC_TOP;
             parity = ~(^data); // odd parity
 
             ps2_idle();
-            #(PS2_CLK_HALF * 2);
+            #PS2_BYTE_PRE_IDLE;
 
             // Start bit
             ps2_send_bit(1'b0);
@@ -358,7 +398,7 @@ module tb_SoC_TOP;
 
             $display("[PS2]  %0t: Sent byte 0x%02h", $time, data);
 
-            #(PS2_CLK_HALF * 4);
+            #PS2_BYTE_POST_IDLE;
         end
     endtask
 
@@ -381,16 +421,21 @@ module tb_SoC_TOP;
     endtask
 
     // ========================================================================
-    // PS/2 Stress Input Helpers
+    // PS/2 Intensive Mash Input Helpers
     // ========================================================================
+    integer ps2_payload_count;
+    integer ps2_make_only_count;
+    integer ps2_tap_count;
+
     task ps2_tap_key;
         input [7:0] make_code;
         input integer gap_after_ns;
         begin
             ps2_send_byte(make_code);
-            #50_000;
+            #0;
             ps2_send_byte(8'hF0);
             ps2_send_byte(make_code);
+            ps2_tap_count = ps2_tap_count + 1;
             #(gap_after_ns);
         end
     endtask
@@ -398,214 +443,215 @@ module tb_SoC_TOP;
     task ps2_tap_key_fast;
         input [7:0] make_code;
         begin
+            ps2_tap_key(make_code, 0);
+        end
+    endtask
+
+    task ps2_make_only_key;
+        input [7:0] make_code;
+        input integer gap_after_ns;
+        begin
+            // Typematic-like / FIFO stress mode:
+            // send make code only, no F0 break sequence.
             ps2_send_byte(make_code);
-            #10_000;
-            ps2_send_byte(8'hF0);
-            ps2_send_byte(make_code);
-            #10_000;
+            ps2_make_only_count = ps2_make_only_count + 1;
+            #(gap_after_ns);
         end
     endtask
 
     task ps2_enter;
         begin
-            ps2_tap_key(8'h5A, 100_000);
+            ps2_tap_key(8'h5A, 0);
         end
     endtask
 
-    task ps2_backspace;
+    task ps2_space;
         begin
-            ps2_tap_key(8'h66, 100_000);
+            ps2_tap_key(8'h29, 0);
         end
     endtask
 
-    task type_abc_enter;
+    task type_mash_payload_tap;
+        input integer gap_after_ns;
         begin
-            ps2_tap_key(8'h1C, 100_000); // a
-            ps2_tap_key(8'h32, 100_000); // b
-            ps2_tap_key(8'h21, 100_000); // c
+            // Payload: asdlkifgjnas;lodfgihasdgo;pihjsdo;pig
+            ps2_tap_key(8'h1C, gap_after_ns); // a
+            ps2_tap_key(8'h1B, gap_after_ns); // s
+            ps2_tap_key(8'h23, gap_after_ns); // d
+            ps2_tap_key(8'h4B, gap_after_ns); // l
+            ps2_tap_key(8'h42, gap_after_ns); // k
+            ps2_tap_key(8'h43, gap_after_ns); // i
+            ps2_tap_key(8'h2B, gap_after_ns); // f
+            ps2_tap_key(8'h34, gap_after_ns); // g
+            ps2_tap_key(8'h3B, gap_after_ns); // j
+            ps2_tap_key(8'h31, gap_after_ns); // n
+            ps2_tap_key(8'h1C, gap_after_ns); // a
+            ps2_tap_key(8'h1B, gap_after_ns); // s
+            ps2_tap_key(8'h4C, gap_after_ns); // ;
+            ps2_tap_key(8'h4B, gap_after_ns); // l
+            ps2_tap_key(8'h44, gap_after_ns); // o
+            ps2_tap_key(8'h23, gap_after_ns); // d
+            ps2_tap_key(8'h2B, gap_after_ns); // f
+            ps2_tap_key(8'h34, gap_after_ns); // g
+            ps2_tap_key(8'h43, gap_after_ns); // i
+            ps2_tap_key(8'h33, gap_after_ns); // h
+            ps2_tap_key(8'h1C, gap_after_ns); // a
+            ps2_tap_key(8'h1B, gap_after_ns); // s
+            ps2_tap_key(8'h23, gap_after_ns); // d
+            ps2_tap_key(8'h34, gap_after_ns); // g
+            ps2_tap_key(8'h44, gap_after_ns); // o
+            ps2_tap_key(8'h4C, gap_after_ns); // ;
+            ps2_tap_key(8'h4D, gap_after_ns); // p
+            ps2_tap_key(8'h43, gap_after_ns); // i
+            ps2_tap_key(8'h33, gap_after_ns); // h
+            ps2_tap_key(8'h3B, gap_after_ns); // j
+            ps2_tap_key(8'h1B, gap_after_ns); // s
+            ps2_tap_key(8'h23, gap_after_ns); // d
+            ps2_tap_key(8'h44, gap_after_ns); // o
+            ps2_tap_key(8'h4C, gap_after_ns); // ;
+            ps2_tap_key(8'h4D, gap_after_ns); // p
+            ps2_tap_key(8'h43, gap_after_ns); // i
+            ps2_tap_key(8'h34, gap_after_ns); // g
+            ps2_payload_count = ps2_payload_count + 1;
+        end
+    endtask
+
+    task type_mash_payload_make_only;
+        input integer gap_after_ns;
+        begin
+            // Same payload, but make-code only. This is intentionally harsher
+            // than normal typing and helps expose FIFO/ack/polling bugs.
+            ps2_make_only_key(8'h1C, gap_after_ns); // a
+            ps2_make_only_key(8'h1B, gap_after_ns); // s
+            ps2_make_only_key(8'h23, gap_after_ns); // d
+            ps2_make_only_key(8'h4B, gap_after_ns); // l
+            ps2_make_only_key(8'h42, gap_after_ns); // k
+            ps2_make_only_key(8'h43, gap_after_ns); // i
+            ps2_make_only_key(8'h2B, gap_after_ns); // f
+            ps2_make_only_key(8'h34, gap_after_ns); // g
+            ps2_make_only_key(8'h3B, gap_after_ns); // j
+            ps2_make_only_key(8'h31, gap_after_ns); // n
+            ps2_make_only_key(8'h1C, gap_after_ns); // a
+            ps2_make_only_key(8'h1B, gap_after_ns); // s
+            ps2_make_only_key(8'h4C, gap_after_ns); // ;
+            ps2_make_only_key(8'h4B, gap_after_ns); // l
+            ps2_make_only_key(8'h44, gap_after_ns); // o
+            ps2_make_only_key(8'h23, gap_after_ns); // d
+            ps2_make_only_key(8'h2B, gap_after_ns); // f
+            ps2_make_only_key(8'h34, gap_after_ns); // g
+            ps2_make_only_key(8'h43, gap_after_ns); // i
+            ps2_make_only_key(8'h33, gap_after_ns); // h
+            ps2_make_only_key(8'h1C, gap_after_ns); // a
+            ps2_make_only_key(8'h1B, gap_after_ns); // s
+            ps2_make_only_key(8'h23, gap_after_ns); // d
+            ps2_make_only_key(8'h34, gap_after_ns); // g
+            ps2_make_only_key(8'h44, gap_after_ns); // o
+            ps2_make_only_key(8'h4C, gap_after_ns); // ;
+            ps2_make_only_key(8'h4D, gap_after_ns); // p
+            ps2_make_only_key(8'h43, gap_after_ns); // i
+            ps2_make_only_key(8'h33, gap_after_ns); // h
+            ps2_make_only_key(8'h3B, gap_after_ns); // j
+            ps2_make_only_key(8'h1B, gap_after_ns); // s
+            ps2_make_only_key(8'h23, gap_after_ns); // d
+            ps2_make_only_key(8'h44, gap_after_ns); // o
+            ps2_make_only_key(8'h4C, gap_after_ns); // ;
+            ps2_make_only_key(8'h4D, gap_after_ns); // p
+            ps2_make_only_key(8'h43, gap_after_ns); // i
+            ps2_make_only_key(8'h34, gap_after_ns); // g
+            ps2_payload_count = ps2_payload_count + 1;
+        end
+    endtask
+
+    task type_probe_commands;
+        begin
+            // Small post-stress probes. If these do not echo/return prompt,
+            // shell input path likely wedged.
+            ps2_tap_key(8'h2B, 0); // f
+            ps2_tap_key(8'h2D, 0); // r
+            ps2_tap_key(8'h24, 0); // e
+            ps2_tap_key(8'h24, 0); // e
             ps2_enter();
-        end
-    endtask
+            #100_000;
 
-    task type_free_enter;
-        begin
-            ps2_tap_key(8'h2B, 80_000);  // f
-            ps2_tap_key(8'h2D, 80_000);  // r
-            ps2_tap_key(8'h24, 80_000);  // e
-            ps2_tap_key(8'h24, 80_000);  // e
+            ps2_tap_key(8'h3C, 0); // u
+            ps2_tap_key(8'h4D, 0); // p
+            ps2_tap_key(8'h2C, 0); // t
+            ps2_tap_key(8'h43, 0); // i
+            ps2_tap_key(8'h3A, 0); // m
+            ps2_tap_key(8'h24, 0); // e
             ps2_enter();
+            #100_000;
         end
     endtask
 
-    task type_uptime_enter;
-        begin
-            ps2_tap_key(8'h3C, 80_000);  // u
-            ps2_tap_key(8'h4D, 80_000);  // p
-            ps2_tap_key(8'h2C, 80_000);  // t
-            ps2_tap_key(8'h43, 80_000);  // i
-            ps2_tap_key(8'h3A, 80_000);  // m
-            ps2_tap_key(8'h24, 80_000);  // e
-            ps2_enter();
-        end
-    endtask
-
-    task type_echo_abc_enter;
-        begin
-            ps2_tap_key(8'h24, 80_000);  // e
-            ps2_tap_key(8'h21, 80_000);  // c
-            ps2_tap_key(8'h33, 80_000);  // h
-            ps2_tap_key(8'h44, 80_000);  // o
-            ps2_tap_key(8'h29, 80_000);  // space
-            ps2_tap_key(8'h1C, 80_000);  // a
-            ps2_tap_key(8'h32, 80_000);  // b
-            ps2_tap_key(8'h21, 80_000);  // c
-            ps2_enter();
-        end
-    endtask
-
-    task type_history_enter;
-        begin
-            ps2_tap_key(8'h33, 80_000);  // h
-            ps2_tap_key(8'h43, 80_000);  // i
-            ps2_tap_key(8'h1B, 80_000);  // s
-            ps2_tap_key(8'h2C, 80_000);  // t
-            ps2_tap_key(8'h44, 80_000);  // o
-            ps2_tap_key(8'h2D, 80_000);  // r
-            ps2_tap_key(8'h35, 80_000);  // y
-            ps2_enter();
-        end
-    endtask
-
-    task type_backspace_test_enter;
-        begin
-            // abc -> backspace -> backspace -> de -> Enter
-            ps2_tap_key(8'h1C, 80_000);  // a
-            ps2_tap_key(8'h32, 80_000);  // b
-            ps2_tap_key(8'h21, 80_000);  // c
-            ps2_backspace();
-            ps2_backspace();
-            ps2_tap_key(8'h23, 80_000);  // d
-            ps2_tap_key(8'h24, 80_000);  // e
-            ps2_enter();
-        end
-    endtask
-
-    task type_long_line_enter;
-        integer i;
-        begin
-            // MAX_CMD_LEN=64 boundary/overflow behavior test.
-            // Firmware should ignore extra chars beyond buffer size.
-            for (i = 0; i < 90; i = i + 1) begin
-                case (i % 6)
-                    0: ps2_tap_key_fast(8'h1C); // a
-                    1: ps2_tap_key_fast(8'h32); // b
-                    2: ps2_tap_key_fast(8'h21); // c
-                    3: ps2_tap_key_fast(8'h23); // d
-                    4: ps2_tap_key_fast(8'h24); // e
-                    5: ps2_tap_key_fast(8'h2B); // f
-                endcase
-            end
-            ps2_enter();
-        end
-    endtask
-
-    task type_typematic_like_a_enter;
-        integer i;
-        begin
-            // Real keyboards repeat make codes while a key is held.
-            // Send repeated make 'a' without break, then send final break.
-            for (i = 0; i < 20; i = i + 1) begin
-                ps2_send_byte(8'h1C); // repeated make 'a'
-                #30_000;
-            end
-
-            ps2_send_byte(8'hF0);
-            ps2_send_byte(8'h1C);
-            ps2_enter();
-        end
-    endtask
-
-    task type_rapid_letter_burst_enter;
-        integer i;
-        begin
-            // Rapid burst to stress FIFO / ack / load-use / polling path.
-            for (i = 0; i < 32; i = i + 1) begin
-                case (i[2:0])
-                    3'd0: ps2_tap_key_fast(8'h1C); // a
-                    3'd1: ps2_tap_key_fast(8'h1B); // s
-                    3'd2: ps2_tap_key_fast(8'h23); // d
-                    3'd3: ps2_tap_key_fast(8'h2B); // f
-                    3'd4: ps2_tap_key_fast(8'h3B); // j
-                    3'd5: ps2_tap_key_fast(8'h42); // k
-                    3'd6: ps2_tap_key_fast(8'h4B); // l
-                    3'd7: ps2_tap_key_fast(8'h4C); // ;
-                endcase
-            end
-            ps2_enter();
-        end
-    endtask
-
-    task run_keyboard_stress_sequence;
+    task run_ultra_keyboard_mash_sequence;
         integer round;
         begin
-            $display("[TB]   %0t: === Keyboard stress sequence start ===", $time);
+            ps2_payload_count = 0;
+            ps2_make_only_count = 0;
+            ps2_tap_count = 0;
 
-            // Phase 1: normal commands repeated
-            for (round = 0; round < 3; round = round + 1) begin
-                $display("[TB]   %0t: Phase 1 normal round %0d", $time, round);
-                type_abc_enter();
-                #1_000_000;
-                type_free_enter();
-                #1_000_000;
-                type_uptime_enter();
-                #1_000_000;
-                type_echo_abc_enter();
-                #1_000_000;
-            end
+            stress_active = 1'b1;
+            $display("[TB]   %0t: === ULTRA KEYBOARD MASH STRESS START ===", $time);
+            $display("[TB]   Payload = asdlkifgjnas;lodfgihasdgo;pihjsdo;pig");
 
-            // Phase 2: backspace / history
-            $display("[TB]   %0t: Phase 2 backspace/history", $time);
-            type_backspace_test_enter();
-            #1_000_000;
-            type_history_enter();
-            #1_000_000;
+            // Phase 0: sync with shell by pressing Enter once.
+            $display("[TB]   %0t: Phase 0: Enter sync", $time);
+            ps2_enter();
+            #100_000;
 
-            // Phase 3: rapid burst
-            $display("[TB]   %0t: Phase 3 rapid burst", $time);
-            type_rapid_letter_burst_enter();
-            #2_000_000;
-
-            // Phase 4: typematic-like repeated make
-            $display("[TB]   %0t: Phase 4 typematic-like repeat", $time);
-            type_typematic_like_a_enter();
-            #2_000_000;
-
-            // Phase 5: long line overflow boundary
-            $display("[TB]   %0t: Phase 5 long line", $time);
-            type_long_line_enter();
-            #2_000_000;
-
-            // Phase 6: repeated Enter
-            $display("[TB]   %0t: Phase 6 repeated enter", $time);
-            for (round = 0; round < 10; round = round + 1) begin
+            // Phase 1: realistic fast taps with almost no gap.
+            $display("[TB]   %0t: Phase 1: realistic make/break taps, no extra gap", $time);
+            for (round = 0; round < 4; round = round + 1) begin
+                $display("[TB]   %0t: Phase 1 round %0d", $time, round);
+                type_mash_payload_tap(0);
                 ps2_enter();
-                #100_000;
+                #10_000;
             end
 
-            // Phase 7: recovery commands
-            $display("[TB]   %0t: Phase 7 recovery commands", $time);
-            type_free_enter();
-            #1_000_000;
-            type_uptime_enter();
-            #1_000_000;
-            type_abc_enter();
+            // Phase 2: slightly more realistic but still aggressive taps.
+            $display("[TB]   %0t: Phase 2: realistic make/break taps, 2us gap", $time);
+            for (round = 0; round < 3; round = round + 1) begin
+                $display("[TB]   %0t: Phase 2 round %0d", $time, round);
+                type_mash_payload_tap(2_000);
+                ps2_enter();
+                #10_000;
+            end
 
-            $display("[TB]   %0t: === Keyboard stress sequence end ===", $time);
+            // Phase 3: make-only burst. This can overflow weak PS/2 FIFO paths.
+            $display("[TB]   %0t: Phase 3: make-only burst", $time);
+            for (round = 0; round < 8; round = round + 1) begin
+                $display("[TB]   %0t: Phase 3 round %0d", $time, round);
+                type_mash_payload_make_only(0);
+                ps2_enter();
+                #5_000;
+            end
+
+            // Phase 4: Enter storm, catches command parser / line reset bugs.
+            $display("[TB]   %0t: Phase 4: repeated Enter storm", $time);
+            for (round = 0; round < 20; round = round + 1) begin
+                ps2_enter();
+                #0;
+            end
+
+            // Phase 5: recovery probes. These should still work after stress.
+            $display("[TB]   %0t: Phase 5: recovery probe commands", $time);
+            type_probe_commands();
+
+            stress_active = 1'b0;
+            $display("[TB]   %0t: === ULTRA KEYBOARD MASH STRESS END ===", $time);
+            $display("[TB]   Payload rounds=%0d, tap_keys=%0d, make_only_keys=%0d, boot_banners=%0d, stress_errors=%0d",
+                ps2_payload_count,
+                ps2_tap_count,
+                ps2_make_only_count,
+                boot_banner_count,
+                stress_error_count);
         end
     endtask
 
+
     // ========================================================================
-    // Main Sequence — Keyboard Stress Test
+    // Main Sequence — Single Intensive Keyboard Mash Stress Test
     // ========================================================================
     initial begin
         CPU_RESETN     = 1'b0;
@@ -616,8 +662,11 @@ module tb_SoC_TOP;
         ps2_data_drive = 1'b1;
 
         $display("============================================");
-        $display(" RV64IM72F8SP SoC Testbench - PS/2 STRESS MODE");
+        $display(" RV64IM72F8SP SoC Testbench - PS/2 TURBO KEYBOARD MASH MODE");
+        $display(" Payload: asdlkifgjnas;lodfgihasdgo;pihjsdo;pig");
         $display(" Sim: %0d us (%0d ms)", SIM_TIME_US, SIM_TIME_US / 1000);
+        $display(" PS2_CLK_HALF=%0d ns, byte pre/post idle=%0d/%0d ns",
+            PS2_CLK_HALF, PS2_BYTE_PRE_IDLE, PS2_BYTE_POST_IDLE);
         $display("============================================");
 
         // Reset
@@ -643,13 +692,15 @@ module tb_SoC_TOP;
         // Give firmware time to print prompt and enter shell loop.
         #8_000_000;
 
-        run_keyboard_stress_sequence();
+        run_ultra_keyboard_mash_sequence();
 
         // Observe idle behavior after stress.
         #20_000_000;
 
         $display("[TB]   %0t: Stress test done", $time);
         $display("[TB]   UART chars observed: %0d", uart_char_count);
+        $display("[TB]   Boot banners observed: %0d", boot_banner_count);
+        $display("[TB]   Stress errors observed: %0d", stress_error_count);
         $finish;
     end
 
