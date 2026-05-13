@@ -182,7 +182,7 @@ always @(*) begin
                 standby_mode           = (trap_status == `TRAP_ECALL && (branch_taken || EX_jump)) ? 1'b0 : 1'b1;
                 trap_done              = (trap_status == `TRAP_ECALL && (branch_taken || EX_jump)) ? 1'b1 : 1'b0;
                 next_trap_handle_state = trap_status == `TIMER_INTERRUPT_IRQ ? IRQ_MEPC_WRITE : 
-                                        (trap_status == `TRAP_ECALL && (branch_taken || EX_jump)) ? IDLE : MEM_STANDBY;
+                                        (trap_status == `TRAP_ECALL && (branch_taken || EX_jump)) ? IDLE : ECALL_MEPC_WRITE;
             end
 
             else begin
@@ -225,7 +225,7 @@ always @(*) begin
             trap_csr_access        = 1'b1;
             csr_write_enable       = 1'b1;
             csr_trap_address       = 12'h341; // mepc
-            csr_trap_write_data = EXR_pc; // Handle the case when the trap is from an instruction before EX stage
+            csr_trap_write_data = MEM_pc; // Handle the case when the trap is from an instruction before EX stage
             trap_done              = 1'b0;
             next_trap_handle_state = WRITE_MEPC;
         end
@@ -239,6 +239,7 @@ always @(*) begin
             csr_write_enable       = 1'b1;
             csr_trap_address       = 12'h341; // mepc
             csr_trap_write_data = jumpped_latch ? pc : 
+                                (WB_pc != {XLEN{1'b0}}) ? WB_pc : 
                                 (MEM_pc != {XLEN{1'b0}}) ? MEM_pc : 
                                 (EX2_pc != {XLEN{1'b0}}) ? EX2_pc : 
                                 (EXR_pc != {XLEN{1'b0}}) ? EXR_pc : 
