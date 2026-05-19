@@ -369,8 +369,45 @@ module RV32IM54F8SP #(
     wire [XLEN-1:0] store_forward_data;
     wire store_forward_enable;
     wire [XLEN-1:0] EXR_read_data2_MUX;
-    assign EXR_read_data2_MUX = store_forward_enable ? store_forward_data : EXR_read_data2;
+    //assign EXR_read_data2_MUX = store_forward_enable ? store_forward_data : EXR_read_data2;
     wire [2:0] EX2_forward_select;
+
+    wire EXR_is_store_instr = (EXR_opcode == `OPCODE_STORE);
+
+    reg [XLEN-1:0] EXR_store_data_hold;
+    reg            EXR_store_data_hold_valid;
+
+    wire EXR_store_advances =
+        EXR_is_store_instr &&
+        !EXR_EX_stall &&
+        !EXR_EX_flush;
+
+    wire [XLEN-1:0] EXR_store_data_resolved =
+        store_forward_enable       ? store_forward_data :
+        EXR_store_data_hold_valid  ? EXR_store_data_hold :
+                                    EXR_read_data2;
+
+    assign EXR_read_data2_MUX =
+        EXR_is_store_instr ? EXR_store_data_resolved : EXR_read_data2;
+
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            EXR_store_data_hold       <= {XLEN{1'b0}};
+            EXR_store_data_hold_valid <= 1'b0;
+        end
+        else if (clk_enable) begin
+            if (ID_EXR_flush || !EXR_is_store_instr) begin
+                EXR_store_data_hold_valid <= 1'b0;
+            end
+            else if (EXR_store_advances) begin
+                EXR_store_data_hold_valid <= 1'b0;
+            end
+            else if (store_forward_enable) begin
+                EXR_store_data_hold       <= store_forward_data;
+                EXR_store_data_hold_valid <= 1'b1;
+            end
+        end
+    end
 
     // WB->MEM store data forwarding
     wire [XLEN-1:0] store_wb_to_mem_forward_data;
@@ -498,6 +535,28 @@ module RV32IM54F8SP #(
     end
     wire jumpped = jump_target_latch == pc;
 
+    reg [XLEN-1:0] trap_target_latch;
+    reg trapped_latch;
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            trap_target_latch <= {XLEN{1'b0}};
+            trapped_latch <= 1'b0;
+        end
+        else if (clk_enable) begin
+            trap_target_latch <= (trapped || goto_mtvec) ? trap_target : {XLEN{1'b0}};
+            if (standby_mode && trapped) begin
+                trapped_latch <= 1'b1;
+            end
+            else if (standby_mode) begin
+                trapped_latch <= trapped_latch;
+            end
+            else begin
+                trapped_latch <= 1'b0;
+            end
+        end
+    end
+    wire trap_handled = trap_target_latch == pc;
+
     wire [11:0] IO_csr_address = IO_instruction[31:20];
     wire IO_valid_csr_address = (IO_csr_address == 12'hB00) ||
                                (IO_csr_address == 12'hB02) ||
@@ -619,6 +678,7 @@ module RV32IM54F8SP #(
         .clk_enable(clk_enable),
         .reset(reset),
         .trapped(trapped),
+        .trapped_latch(trapped_latch),
         .trap_status(trap_status),
         .csr_write_enable(csr_write_enable_source),
         .csr_read_address(csr_read_address),
@@ -757,6 +817,7 @@ module RV32IM54F8SP #(
         .misaligned_memory_flush(misaligned_memory_flush),
         .pth_done_flush(pth_done_flush),
         .csr_ready(csr_ready),
+        .mret_done(mret_done),
 
         // Consumer: EXR stage
         .EXR_rs1(EXR_rs1),
@@ -910,6 +971,8 @@ module RV32IM54F8SP #(
         .clk(clk),
         .clk_enable(clk_enable),
         .reset(reset),
+        .EX_jump(EX_jump),
+        .jump(EX2_jump),
         .jumpped_latch(jumpped_latch),
         .trap_status(trap_status),
         .branch_taken(branch_taken),
@@ -937,7 +1000,8 @@ module RV32IM54F8SP #(
         .csr_trap_write_data(csr_trap_write_data),
         .mret_executed(mret_executed),
         .pth_read(pth_read),
-        .goto_mtvec(goto_mtvec)
+        .goto_mtvec(goto_mtvec),
+        .mret_done(mret_done)
     );
 
     // =========================================================================

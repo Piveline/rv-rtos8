@@ -8,6 +8,7 @@ module CSRFile #(
     input clk_enable,
     input reset,                          // reset signal
     input trapped,
+    input trapped_latch,
     input mret_executed,
     input csr_write_enable,               // write enable signal
     input [11:0] csr_read_address,        // address to read
@@ -130,7 +131,7 @@ module CSRFile #(
             if (instruction_retired) begin
                 minstret <= minstret + 1;
             end
-            if (trap_entry && (trap_status != `TRAP_MRET)) begin
+            if (trapped_latch && (trap_status != `TRAP_MRET)) begin
                 MPIE <= MIE;     
                 MIE  <= 1'b0;    
             end 

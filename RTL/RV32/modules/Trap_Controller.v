@@ -7,6 +7,8 @@ module TrapController #(
     input wire clk_enable,
     input wire reset,
 
+    input wire jump,
+    input wire EX_jump,
     input wire jumpped_latch,
     input wire [XLEN-1:0] pc,
     input wire [XLEN-1:0] IF_pc,
@@ -38,7 +40,8 @@ module TrapController #(
     output reg standby_mode,
     output reg mret_executed,
     output reg pth_read,
-    output reg goto_mtvec
+    output reg goto_mtvec,
+    output reg mret_done
 );
 
 localparam IDLE             = 4'b0000;
@@ -147,6 +150,7 @@ always @(*) begin
     next_trap_handle_state       = trap_handle_state;
     goto_mtvec                    = 1'b0;
     pth_read                     = 1'b0;
+    mret_done                   = 1'b0;
 
     case (trap_handle_state)
 
@@ -175,9 +179,10 @@ always @(*) begin
                  * ECALL / timer interrupt detected before final trap entry.
                  * Drain pipeline first, then save mepc/mcause.
                  */
-                standby_mode           = 1'b1;
-                trap_done              = 1'b0;
-                next_trap_handle_state = trap_status == `TIMER_INTERRUPT_IRQ ? IRQ_MEPC_WRITE : MEM_STANDBY;
+                standby_mode           = (trap_status == `TRAP_ECALL && (branch_taken || jumpped_latch)) ? 1'b0 : 1'b1;
+                trap_done              = (trap_status == `TRAP_ECALL && (branch_taken || jumpped_latch)) ? 1'b1 : 1'b0;
+                next_trap_handle_state = trap_status == `TIMER_INTERRUPT_IRQ ? IRQ_MEPC_WRITE : 
+                                        (trap_status == `TRAP_ECALL && (branch_taken || jumpped_latch)) ? IDLE : ECALL_MEPC_WRITE;
             end
 
             else begin
@@ -195,15 +200,15 @@ always @(*) begin
         end
 
         MEM_STANDBY: begin
-            standby_mode           = 1'b1;
-            trap_done              = 1'b0;
-            next_trap_handle_state = (latched_trap_status == `TRAP_ECALL && branch_taken) ? IDLE : WB_STANDBY;
+            standby_mode           = (latched_trap_status == `TRAP_ECALL && (branch_taken || jump)) ? 1'b0 : 1'b1;
+            trap_done              = (latched_trap_status == `TRAP_ECALL && (branch_taken || jump)) ? 1'b1 : 1'b0;
+            next_trap_handle_state = (latched_trap_status == `TRAP_ECALL && (branch_taken || jump)) ? IDLE : WB_STANDBY;
         end
 
         WB_STANDBY: begin
             standby_mode           = 1'b1;
             trap_done              = 1'b0;
-            next_trap_handle_state = (latched_trap_status == `TRAP_ECALL && branch_taken) ? IDLE : RTRE_STANDBY;
+            next_trap_handle_state = (latched_trap_status == `TRAP_ECALL && (branch_taken || jump)) ? IDLE : RTRE_STANDBY;
         end
 
         RTRE_STANDBY: begin
@@ -220,7 +225,7 @@ always @(*) begin
             trap_csr_access        = 1'b1;
             csr_write_enable       = 1'b1;
             csr_trap_address       = 12'h341; // mepc
-            csr_trap_write_data = EXR_pc; // Handle the case when the trap is from an instruction before EX stage
+            csr_trap_write_data = MEM_pc; // Handle the case when the trap is from an instruction before EX stage
             trap_done              = 1'b0;
             next_trap_handle_state = WRITE_MEPC;
         end
@@ -234,6 +239,7 @@ always @(*) begin
             csr_write_enable       = 1'b1;
             csr_trap_address       = 12'h341; // mepc
             csr_trap_write_data = jumpped_latch ? pc : 
+                                (WB_pc != {XLEN{1'b0}}) ? WB_pc : 
                                 (MEM_pc != {XLEN{1'b0}}) ? MEM_pc : 
                                 (EX2_pc != {XLEN{1'b0}}) ? EX2_pc : 
                                 (EXR_pc != {XLEN{1'b0}}) ? EXR_pc : 
@@ -339,7 +345,6 @@ always @(*) begin
             csr_trap_address       = 12'h341; // mepc
             trap_target            = {csr_read_data[XLEN-1:2], 2'b00};
             trap_done              = 1'b1;
-            mret_executed          = 1'b1;
             pth_read               = 1'b1;
             next_trap_handle_state = RETURN_MRET_D1;
         end
@@ -349,7 +354,6 @@ always @(*) begin
             csr_trap_address       = 12'h341; // mepc
             trap_target            = {csr_read_data[XLEN-1:2], 2'b00};
             trap_done              = 1'b1;
-            mret_executed          = 1'b1;
             pth_read               = 1'b1;
             next_trap_handle_state = RETURN_MRET_D2;
         end
@@ -359,7 +363,6 @@ always @(*) begin
             csr_trap_address       = 12'h341; // mepc
             trap_target            = {csr_read_data[XLEN-1:2], 2'b00};
             trap_done              = 1'b1;
-            mret_executed          = 1'b1;
             pth_read               = 1'b1;
             next_trap_handle_state = GOTO_MRET;
         end
@@ -373,6 +376,7 @@ always @(*) begin
             pth_read               = 1'b1;
             next_trap_handle_state = IDLE;
             pth_done_flush         = 1'b1;
+            mret_done               = 1'b1;
         end
 
         default: begin
