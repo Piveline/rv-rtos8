@@ -53,9 +53,10 @@ FreeRTOS porting on 8-stage pipelined RISC-V CPU with HDMI and keyboards
 | Sub-benchmark | RV32 (cycles/iter) | RV64 (cycles/iter) | RV64 Overhead |
 | ------------- | ------------------ | ------------------ | ------------- |
 | Task Switch   | 320                | 439                | +37.2%        |
-| Task Preempt  | 1,074              | 1,264              | +17.7%        |
+| Task Preempt  | 1,073              | 1,264              | +17.7%        |
 
-<img width="1080" height="2408" alt="1779759036476" src="https://github.com/user-attachments/assets/41f6638d-bdcb-4633-a1fe-91d195974607" />
+<img width="1280" height="1280" alt="image" src="https://github.com/user-attachments/assets/16bfd668-66a9-4df3-9a79-8867be824044" />
+
 
 ## Acknowledgment
 ### Contributors
