@@ -60,8 +60,8 @@ FreeRTOS porting on 8-stage pipelined RISC-V CPU with HDMI and keyboards
 
 ## Acknowledgment
 ### Contributors
-- @T410N (Hyunwoo Kang) - Project Lead & Architecture design & Main debugging
-- @iGangs3597 (iGangs) - Shell develop & CSR modification
-- @kim0331-sketch (Jongwon Kim) - Exception/Interrupt Handling (CSR, CLINT) & Architecture block diagram
-- @DBTMDDN (Seungwoo You) - mstatus CSR Implementation & FreeRTOS Trap Logic Extension
-- @ghilmc1019 - CLINT implementation & Trap Controller TIMER_INTERRUPT_IRQ handling logic design
+- [@T410N](https://github.com/T410N) (Hyunwoo Kang) - Project Lead & Architecture design & Main debugging
+- [@iGangs3597](https://github.com/iGangs3597) (iGangs) - Shell develop & CSR modification
+- [@kim0331-sketch](https://github.com/kim0331-sketch) (Jongwon Kim) - Exception/Interrupt Handling (CSR, CLINT) & Architecture block diagram
+- [@DBTMDDN](https://github.com/DBTMDDN) (Seungwoo You) - mstatus CSR Implementation & FreeRTOS Trap Logic Extension
+- [@ghilmc1019](https://github.com/ghilmc1019) - CLINT implementation & Trap Controller TIMER_INTERRUPT_IRQ handling logic design
