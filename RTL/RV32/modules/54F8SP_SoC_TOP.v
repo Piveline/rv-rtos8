@@ -1,3 +1,5 @@
+`include "./modules/ps2_cdc_fifo.v"
+
 module RV32IM54F8SPSoCTOP #(
     parameter XLEN = 32
 )(
@@ -133,48 +135,28 @@ module RV32IM54F8SPSoCTOP #(
     );
  
     // ========================================================================
-    // 6. PS/2 CDC - pixel_clk → sys_clk
+    // 6. PS/2 CDC FIFO - pixel_clk → sys_clk (replaces toggle CDC)
     // ========================================================================
- 
-    reg [7:0] kb_scancode_pix;
-    reg       kb_toggle_pix;
- 
-    always @(posedge pixel_clk or posedge pix_reset) begin
-        if (pix_reset) begin
-            kb_scancode_pix <= 8'h00;
-            kb_toggle_pix   <= 1'b0;
-        end else if (scancode_valid) begin
-            kb_scancode_pix <= scancode;
-            kb_toggle_pix   <= ~kb_toggle_pix;
-        end
-    end
- 
-    reg [1:0] kb_toggle_sync;
-    reg       kb_toggle_prev;
-    reg [7:0] kb_scancode_sys;
-    reg       kb_new_data;
- 
-    wire kb_ack;
- 
-    always @(posedge sys_clk or posedge sys_reset) begin
-        if (sys_reset) begin
-            kb_toggle_sync <= 2'b00;
-            kb_toggle_prev <= 1'b0;
-            kb_scancode_sys <= 8'h00;
-            kb_new_data     <= 1'b0;
-        end else begin
-            kb_toggle_sync <= {kb_toggle_sync[0], kb_toggle_pix};
-            kb_toggle_prev <= kb_toggle_sync[1];
- 
-            if (kb_toggle_sync[1] != kb_toggle_prev) begin
-                kb_scancode_sys <= kb_scancode_pix;
-                kb_new_data     <= 1'b1;
-            end
- 
-            if (kb_ack)
-                kb_new_data <= 1'b0;
-        end
-    end
+
+    wire       kb_fifo_full;
+    wire       kb_fifo_empty;
+    wire [7:0] kb_scancode_sys;
+    wire       kb_new_data = !kb_fifo_empty;
+    wire       kb_ack;
+
+    ps2_cdc_fifo cdc_fifo (
+        .wr_clk  (pixel_clk),
+        .wr_rst  (pix_reset),
+        .wr_en   (scancode_valid),
+        .wr_data (scancode),
+        .wr_full (kb_fifo_full),
+
+        .rd_clk  (sys_clk),
+        .rd_rst  (sys_reset),
+        .rd_en   (kb_ack && !kb_fifo_empty),
+        .rd_data (kb_scancode_sys),
+        .rd_empty(kb_fifo_empty)
+    );
  
     // ========================================================================
     // 7. CPU Core (sys_clk domain)
