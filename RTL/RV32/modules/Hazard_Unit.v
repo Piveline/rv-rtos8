@@ -262,7 +262,7 @@ module HazardUnit (
             EXR_EX_flush = 1'b1;    // bubble into EX (was EX_EX2_flush)
         end
 
-        if (exr_data_stall && retire_hazard_rs1) begin
+        if (exr_data_stall && (retire_hazard_rs1 || retire_hazard_rs2)) begin
                 retire_stall = 1'b1;
         end
 
