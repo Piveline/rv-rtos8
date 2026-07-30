@@ -409,6 +409,38 @@ module RV32IM54F8SP #(
         end
     end
 
+    // ---- EXR ALU operand sticky-hold (generalization of EXR_store_data_hold) ----
+    reg [XLEN-1:0] EXR_srcA_hold, EXR_srcB_hold;
+    reg            EXR_srcA_hold_valid, EXR_srcB_hold_valid;
+
+    wire EXR_fwd_a_hit = (alu_forward_source_select_a != 3'b000);
+    wire EXR_fwd_b_hit = (alu_forward_source_select_b != 3'b000);
+
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            EXR_srcA_hold <= {XLEN{1'b0}};
+            EXR_srcB_hold <= {XLEN{1'b0}};
+            EXR_srcA_hold_valid <= 1'b0;
+            EXR_srcB_hold_valid <= 1'b0;
+        end
+        else if (clk_enable) begin
+            if (ID_EXR_flush || !ID_EXR_stall) begin
+                EXR_srcA_hold_valid <= 1'b0;
+                EXR_srcB_hold_valid <= 1'b0;
+            end
+            else begin
+                if (EXR_fwd_a_hit) begin
+                    EXR_srcA_hold       <= alu_forward_source_data_a;
+                    EXR_srcA_hold_valid <= 1'b1;
+                end
+                if (EXR_fwd_b_hit) begin
+                    EXR_srcB_hold       <= alu_forward_source_data_b;
+                    EXR_srcB_hold_valid <= 1'b1;
+                end
+            end
+        end
+    end
+
     // WB->MEM store data forwarding
     wire [XLEN-1:0] store_wb_to_mem_forward_data;
     wire store_wb_to_mem_forward_enable;
@@ -423,7 +455,7 @@ module RV32IM54F8SP #(
     assign retire_instruction = writeback_instruction;
 
     wire csr_write_enable_source;
-    assign csr_write_enable_source = tc_csr_write_enable ? tc_csr_write_enable : WB_csr_write_enable;
+    assign csr_write_enable_source = trap_csr_access ? tc_csr_write_enable : WB_csr_write_enable;
 
     // IO signals for MMIO Interface
     assign MMIO_data_memory_write_data = data_memory_write_data;
@@ -476,7 +508,16 @@ module RV32IM54F8SP #(
             default:           EXR_normal_source_b = {XLEN{1'b0}};
         endcase
 
+        EXR_src_A = EXR_fwd_a_hit       ? alu_forward_source_data_a :
+                    EXR_srcA_hold_valid ? EXR_srcA_hold             :
+                                        EXR_normal_source_a;
+
+        EXR_src_B = EXR_fwd_b_hit       ? alu_forward_source_data_b :
+                    EXR_srcB_hold_valid ? EXR_srcB_hold             :
+                                        EXR_normal_source_b;
+
         // Forwarding mux A (priority: EX > BR > MEM > WB > normal)
+        /*
         case (alu_forward_source_select_a)
             3'b001:  EXR_src_A = alu_forward_source_data_a;
             3'b010:  EXR_src_A = alu_forward_source_data_a;
@@ -495,7 +536,7 @@ module RV32IM54F8SP #(
             3'b101:  EXR_src_B = alu_forward_source_data_b;
             default: EXR_src_B = EXR_normal_source_b;
         endcase
-
+*/
         // CSR address and data selection (unchanged - WB/trap write, ID read)
         if (trap_csr_access) begin
             csr_write_data   = csr_trap_write_data;
