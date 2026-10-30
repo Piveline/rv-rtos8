@@ -79,8 +79,7 @@ module HazardUnit (
     output reg EXR_EX_stall,    // NEW
     output reg EX_EX2_stall,
     output reg EX_MEM_stall,
-    output reg MEM_WB_stall,
-    output reg retire_stall
+    output reg MEM_WB_stall
 );
 
     wire is_store = (EXR_opcode == `OPCODE_STORE);
@@ -169,7 +168,6 @@ module HazardUnit (
         EX_EX2_stall = 1'b0;
         EX_MEM_stall = 1'b0;
         MEM_WB_stall = 1'b0;
-        retire_stall = 1'b0;
 
         // ALU forwarding hazards (priority: EX > BR > MEM > WB)
         // For Store instructions, rs2 is NOT an ALU source → mask [1]
@@ -260,10 +258,6 @@ module HazardUnit (
             IO_ID_stall  = 1'b1;
             ID_EXR_stall = 1'b1;
             EXR_EX_flush = 1'b1;    // bubble into EX (was EX_EX2_flush)
-        end
-
-        if (exr_data_stall && (retire_hazard_rs1 || retire_hazard_rs2)) begin
-                retire_stall = 1'b1;
         end
 
         if (csr_data_hazard && trap_done && csr_ready && !standby_mode &&
