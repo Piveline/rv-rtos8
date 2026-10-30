@@ -2,6 +2,7 @@
 `include "./modules/headers/rf_wd_select.vh"
 `include "./modules/headers/alu_op.vh"
 `include "./modules/headers/opcode.vh"
+`include "./modules/headers/csr_funct3.vh"
 
 `include "./modules/ALU.v"
 `include "./modules/ALU_Controller.v"
@@ -415,6 +416,38 @@ module RV64IM72F8SP #(
         end
     end
 
+    // ---- EXR ALU operand sticky-hold (generalization of EXR_store_data_hold) ----
+    reg [XLEN-1:0] EXR_srcA_hold, EXR_srcB_hold;
+    reg            EXR_srcA_hold_valid, EXR_srcB_hold_valid;
+
+    wire EXR_fwd_a_hit = (alu_forward_source_select_a != 3'b000);
+    wire EXR_fwd_b_hit = (alu_forward_source_select_b != 3'b000);
+
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            EXR_srcA_hold <= {XLEN{1'b0}};
+            EXR_srcB_hold <= {XLEN{1'b0}};
+            EXR_srcA_hold_valid <= 1'b0;
+            EXR_srcB_hold_valid <= 1'b0;
+        end
+        else if (clk_enable) begin
+            if (ID_EXR_flush || !ID_EXR_stall) begin
+                EXR_srcA_hold_valid <= 1'b0;
+                EXR_srcB_hold_valid <= 1'b0;
+            end
+            else begin
+                if (EXR_fwd_a_hit) begin
+                    EXR_srcA_hold       <= alu_forward_source_data_a;
+                    EXR_srcA_hold_valid <= 1'b1;
+                end
+                if (EXR_fwd_b_hit) begin
+                    EXR_srcB_hold       <= alu_forward_source_data_b;
+                    EXR_srcB_hold_valid <= 1'b1;
+                end
+            end
+        end
+    end
+
     // WB->MEM store data forwarding
     wire [XLEN-1:0] store_wb_to_mem_forward_data;
     wire store_wb_to_mem_forward_enable;
@@ -429,7 +462,7 @@ module RV64IM72F8SP #(
     assign retire_instruction = writeback_instruction;
 
     wire csr_write_enable_source;
-    assign csr_write_enable_source = tc_csr_write_enable ? tc_csr_write_enable : WB_csr_write_enable;
+    assign csr_write_enable_source = trap_csr_access ? tc_csr_write_enable : WB_csr_write_enable;
 
     // IO signals for MMIO Interface
     assign MMIO_data_memory_write_data = data_memory_write_data;
@@ -482,7 +515,16 @@ module RV64IM72F8SP #(
             default:           EXR_normal_source_b = {XLEN{1'b0}};
         endcase
 
+        EXR_src_A = EXR_fwd_a_hit       ? alu_forward_source_data_a :
+                    EXR_srcA_hold_valid ? EXR_srcA_hold             :
+                                        EXR_normal_source_a;
+
+        EXR_src_B = EXR_fwd_b_hit       ? alu_forward_source_data_b :
+                    EXR_srcB_hold_valid ? EXR_srcB_hold             :
+                                        EXR_normal_source_b;
+
         // Forwarding mux A (priority: EX > BR > MEM > WB > normal)
+        /*
         case (alu_forward_source_select_a)
             3'b001:  EXR_src_A = alu_forward_source_data_a;
             3'b010:  EXR_src_A = alu_forward_source_data_a;
@@ -501,7 +543,7 @@ module RV64IM72F8SP #(
             3'b101:  EXR_src_B = alu_forward_source_data_b;
             default: EXR_src_B = EXR_normal_source_b;
         endcase
-
+*/
         // CSR address and data selection (unchanged - WB/trap write, ID read)
         if (trap_csr_access) begin
             csr_write_data   = csr_trap_write_data;
@@ -564,19 +606,22 @@ module RV64IM72F8SP #(
     wire trap_handled = trap_target_latch == pc;
 
     wire [11:0] IO_csr_address = IO_instruction[31:20];
-    wire IO_valid_csr_address = (IO_csr_address == 12'hB00) ||
-                               (IO_csr_address == 12'hB02) ||
-                               (IO_csr_address == 12'hF11) ||
-                               (IO_csr_address == 12'hF12) ||
-                               (IO_csr_address == 12'hF14) ||
-                               (IO_csr_address == 12'h300) ||
-                               (IO_csr_address == 12'h301) ||
-                               (IO_csr_address == 12'h304) ||
-                               (IO_csr_address == 12'h305) ||
-                               (IO_csr_address == 12'h340) ||
-                               (IO_csr_address == 12'h341) ||
-                               (IO_csr_address == 12'h342) ||
-                               (IO_csr_address == 12'h344);
+    wire IO_is_csr_insn = (IO_instruction[6:0] == `OPCODE_ENVIRONMENT) &&
+                          (IO_instruction[14:12] != `CSR_NONE);
+    wire IO_valid_csr_address = IO_is_csr_insn &&
+                                ((IO_csr_address == 12'hB00) ||
+                                 (IO_csr_address == 12'hB02) ||
+                                 (IO_csr_address == 12'hF11) ||
+                                 (IO_csr_address == 12'hF12) ||
+                                 (IO_csr_address == 12'hF14) ||
+                                 (IO_csr_address == 12'h300) ||
+                                 (IO_csr_address == 12'h301) ||
+                                 (IO_csr_address == 12'h304) ||
+                                 (IO_csr_address == 12'h305) ||
+                                 (IO_csr_address == 12'h340) ||
+                                 (IO_csr_address == 12'h341) ||
+                                 (IO_csr_address == 12'h342) ||
+                                 (IO_csr_address == 12'h344));
 
     // =========================================================================
     // Module Instantiations
@@ -1024,6 +1069,8 @@ module RV64IM72F8SP #(
         .load_use_hazard(load_use_hazard),
         .jump(EXR_jump),                   // CHANGED: EX_jump - EXR_jump
         .exr_data_stall(exr_data_stall),
+        .branch_prediction_miss(branch_prediction_miss),
+        .branch_target(branch_target),
 
         .IF_pc(instruction_pc),
         .IF_pc_plus_4(instruction_pc_plus_4),
