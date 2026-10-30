@@ -15,6 +15,8 @@ module IF_IO_Register #(
     input wire [6:0] EX2_opcode,
     input wire load_use_hazard,
     input wire exr_data_stall,
+    input wire branch_prediction_miss,
+    input wire [XLEN-1:0] branch_target,
 
     // signals from IF phase
     input wire [XLEN-1:0] IF_pc,
@@ -32,6 +34,12 @@ reg is_load_use_hazard;
 reg branch_estimation_reg;
 wire is_store = (EX2_opcode == `OPCODE_STORE);
 wire is_m_extend = (ID_opcode == `OPCODE_RTYPE) && (ID_funct7 == 7'b000_0001);
+
+reg est_pending = 1'b0;
+reg [XLEN-1:0] est_target = {XLEN{1'b0}};
+
+wire est_squash = branch_estimation && !IF_IO_stall && !is_m_extend;
+wire est_wrong_path = est_pending && !est_squash && (IF_pc != est_target);
 
 
 always @(posedge clk) begin
@@ -51,6 +59,12 @@ always @(posedge clk) begin
         end
         else if (flush_reg && !IF_IO_stall) begin
             flush_reg <= 1'b0;
+            IO_pc <= {XLEN{1'b0}};
+            IO_pc_plus_4 <= {XLEN{1'b0}};
+            IO_instruction <= 32'h0000_0013; // ADDI x0, x0, 0 = RISC-V NOP, HINT
+        end
+        else if (est_wrong_path && !IF_IO_stall) begin
+            is_load_use_hazard <= 1'b0;
             IO_pc <= {XLEN{1'b0}};
             IO_pc_plus_4 <= {XLEN{1'b0}};
             IO_instruction <= 32'h0000_0013; // ADDI x0, x0, 0 = RISC-V NOP, HINT
@@ -77,6 +91,17 @@ always @(posedge clk) begin
         if (load_use_hazard && flush_reg) begin
             is_load_use_hazard <= 1'b1;
         end 
+
+        if (flush || (jump && !IF_IO_stall) || branch_prediction_miss) begin
+            est_pending <= 1'b0;
+        end
+        else if (est_squash) begin
+            est_pending <= 1'b1;
+            est_target  <= branch_target;
+        end
+        else if (est_pending && !IF_IO_stall && (IF_pc == est_target)) begin
+            est_pending <= 1'b0;
+        end
 
         if (branch_estimation) begin
             branch_estimation_reg <= 1'b1;
