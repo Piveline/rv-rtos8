@@ -247,6 +247,132 @@ module RV64IM72F_8SP_tb;
         end
     endtask
 
+    task load_freeze_rs2_gap1;
+        begin
+            clear_imem;
+            dut.instruction_memory.data[0] = 32'h10010fb7;   // 0000: lui x31,0x10010
+            dut.instruction_memory.data[1] = 32'h100006b7;   // 0004: lui x13,0x10000
+            dut.instruction_memory.data[2] = 32'h00700713;   // 0008: li x14,7
+            dut.instruction_memory.data[3] = 32'h00e6b023;   // 000c: sd x14,0(x13)
+            dut.instruction_memory.data[4] = 32'h2fad72b7;   // 0010: lui x5,0x2fad7
+            dut.instruction_memory.data[5] = 32'h4f42829b;   // 0014: addiw x5,x5,1268
+            dut.instruction_memory.data[6] = 32'h00000013;   // 0018: nop
+            dut.instruction_memory.data[7] = 32'h00000013;   // 001c: nop
+            dut.instruction_memory.data[8] = 32'h00000013;   // 0020: nop
+            dut.instruction_memory.data[9] = 32'h00000013;   // 0024: nop
+            dut.instruction_memory.data[10] = 32'h00000013;   // 0028: nop
+            dut.instruction_memory.data[11] = 32'h00000013;   // 002c: nop
+            dut.instruction_memory.data[12] = 32'h00000013;   // 0030: nop
+            dut.instruction_memory.data[13] = 32'h00000013;   // 0034: nop
+            dut.instruction_memory.data[14] = 32'h06300313;   // 0038: li x6,99
+            dut.instruction_memory.data[15] = 32'h377302b7;   // 003c: lui x5,0x37730
+            dut.instruction_memory.data[16] = 32'h00000013;   // 0040: nop
+            dut.instruction_memory.data[17] = 32'h0006b303;   // 0044: ld x6,0(x13)
+            dut.instruction_memory.data[18] = 32'h005304b3;   // 0048: add x9,x6,x5
+            dut.instruction_memory.data[19] = 32'h00000013;   // 004c: nop
+            dut.instruction_memory.data[20] = 32'h00000013;   // 0050: nop
+            dut.instruction_memory.data[21] = 32'h00000013;   // 0054: nop
+            dut.instruction_memory.data[22] = 32'h00000013;   // 0058: nop
+            dut.instruction_memory.data[23] = 32'h000fa023;   // 005c: sw x0,0(x31)
+            dut.instruction_memory.data[24] = 32'h0000006f;   // 0060: j 60 <_start+0x60>
+        end
+    endtask
+
+    task load_freeze_rs2_gap2;
+        begin
+            clear_imem;
+            dut.instruction_memory.data[0] = 32'h10010fb7;   // 0000: lui x31,0x10010
+            dut.instruction_memory.data[1] = 32'h100006b7;   // 0004: lui x13,0x10000
+            dut.instruction_memory.data[2] = 32'h00700713;   // 0008: li x14,7
+            dut.instruction_memory.data[3] = 32'h00e6b023;   // 000c: sd x14,0(x13)
+            dut.instruction_memory.data[4] = 32'h2fad72b7;   // 0010: lui x5,0x2fad7
+            dut.instruction_memory.data[5] = 32'h4f42829b;   // 0014: addiw x5,x5,1268
+            dut.instruction_memory.data[6] = 32'h00000013;   // 0018: nop
+            dut.instruction_memory.data[7] = 32'h00000013;   // 001c: nop
+            dut.instruction_memory.data[8] = 32'h00000013;   // 0020: nop
+            dut.instruction_memory.data[9] = 32'h00000013;   // 0024: nop
+            dut.instruction_memory.data[10] = 32'h00000013;   // 0028: nop
+            dut.instruction_memory.data[11] = 32'h00000013;   // 002c: nop
+            dut.instruction_memory.data[12] = 32'h00000013;   // 0030: nop
+            dut.instruction_memory.data[13] = 32'h00000013;   // 0034: nop
+            dut.instruction_memory.data[14] = 32'h06300313;   // 0038: li x6,99
+            dut.instruction_memory.data[15] = 32'h377302b7;   // 003c: lui x5,0x37730
+            dut.instruction_memory.data[16] = 32'h00000013;   // 0040: nop
+            dut.instruction_memory.data[17] = 32'h00000013;   // 0044: nop
+            dut.instruction_memory.data[18] = 32'h0006b303;   // 0048: ld x6,0(x13)
+            dut.instruction_memory.data[19] = 32'h005304b3;   // 004c: add x9,x6,x5
+            dut.instruction_memory.data[20] = 32'h00000013;   // 0050: nop
+            dut.instruction_memory.data[21] = 32'h00000013;   // 0054: nop
+            dut.instruction_memory.data[22] = 32'h00000013;   // 0058: nop
+            dut.instruction_memory.data[23] = 32'h00000013;   // 005c: nop
+            dut.instruction_memory.data[24] = 32'h000fa023;   // 0060: sw x0,0(x31)
+            dut.instruction_memory.data[25] = 32'h0000006f;   // 0064: j 64 <_start+0x64>
+        end
+    endtask
+
+    task load_freeze_rs1_gap1;
+        begin
+            clear_imem;
+            dut.instruction_memory.data[0] = 32'h10010fb7;   // 0000: lui x31,0x10010
+            dut.instruction_memory.data[1] = 32'h100006b7;   // 0004: lui x13,0x10000
+            dut.instruction_memory.data[2] = 32'h00700713;   // 0008: li x14,7
+            dut.instruction_memory.data[3] = 32'h00e6b023;   // 000c: sd x14,0(x13)
+            dut.instruction_memory.data[4] = 32'h2fad72b7;   // 0010: lui x5,0x2fad7
+            dut.instruction_memory.data[5] = 32'h4f42829b;   // 0014: addiw x5,x5,1268
+            dut.instruction_memory.data[6] = 32'h00000013;   // 0018: nop
+            dut.instruction_memory.data[7] = 32'h00000013;   // 001c: nop
+            dut.instruction_memory.data[8] = 32'h00000013;   // 0020: nop
+            dut.instruction_memory.data[9] = 32'h00000013;   // 0024: nop
+            dut.instruction_memory.data[10] = 32'h00000013;   // 0028: nop
+            dut.instruction_memory.data[11] = 32'h00000013;   // 002c: nop
+            dut.instruction_memory.data[12] = 32'h00000013;   // 0030: nop
+            dut.instruction_memory.data[13] = 32'h00000013;   // 0034: nop
+            dut.instruction_memory.data[14] = 32'h06300313;   // 0038: li x6,99
+            dut.instruction_memory.data[15] = 32'h377302b7;   // 003c: lui x5,0x37730
+            dut.instruction_memory.data[16] = 32'h00000013;   // 0040: nop
+            dut.instruction_memory.data[17] = 32'h0006b303;   // 0044: ld x6,0(x13)
+            dut.instruction_memory.data[18] = 32'h006284b3;   // 0048: add x9,x5,x6
+            dut.instruction_memory.data[19] = 32'h00000013;   // 004c: nop
+            dut.instruction_memory.data[20] = 32'h00000013;   // 0050: nop
+            dut.instruction_memory.data[21] = 32'h00000013;   // 0054: nop
+            dut.instruction_memory.data[22] = 32'h00000013;   // 0058: nop
+            dut.instruction_memory.data[23] = 32'h000fa023;   // 005c: sw x0,0(x31)
+            dut.instruction_memory.data[24] = 32'h0000006f;   // 0060: j 60 <_start+0x60>
+        end
+    endtask
+
+    task load_freeze_rs1_gap2;
+        begin
+            clear_imem;
+            dut.instruction_memory.data[0] = 32'h10010fb7;   // 0000: lui x31,0x10010
+            dut.instruction_memory.data[1] = 32'h100006b7;   // 0004: lui x13,0x10000
+            dut.instruction_memory.data[2] = 32'h00700713;   // 0008: li x14,7
+            dut.instruction_memory.data[3] = 32'h00e6b023;   // 000c: sd x14,0(x13)
+            dut.instruction_memory.data[4] = 32'h2fad72b7;   // 0010: lui x5,0x2fad7
+            dut.instruction_memory.data[5] = 32'h4f42829b;   // 0014: addiw x5,x5,1268
+            dut.instruction_memory.data[6] = 32'h00000013;   // 0018: nop
+            dut.instruction_memory.data[7] = 32'h00000013;   // 001c: nop
+            dut.instruction_memory.data[8] = 32'h00000013;   // 0020: nop
+            dut.instruction_memory.data[9] = 32'h00000013;   // 0024: nop
+            dut.instruction_memory.data[10] = 32'h00000013;   // 0028: nop
+            dut.instruction_memory.data[11] = 32'h00000013;   // 002c: nop
+            dut.instruction_memory.data[12] = 32'h00000013;   // 0030: nop
+            dut.instruction_memory.data[13] = 32'h00000013;   // 0034: nop
+            dut.instruction_memory.data[14] = 32'h06300313;   // 0038: li x6,99
+            dut.instruction_memory.data[15] = 32'h377302b7;   // 003c: lui x5,0x37730
+            dut.instruction_memory.data[16] = 32'h00000013;   // 0040: nop
+            dut.instruction_memory.data[17] = 32'h00000013;   // 0044: nop
+            dut.instruction_memory.data[18] = 32'h0006b303;   // 0048: ld x6,0(x13)
+            dut.instruction_memory.data[19] = 32'h006284b3;   // 004c: add x9,x5,x6
+            dut.instruction_memory.data[20] = 32'h00000013;   // 0050: nop
+            dut.instruction_memory.data[21] = 32'h00000013;   // 0054: nop
+            dut.instruction_memory.data[22] = 32'h00000013;   // 0058: nop
+            dut.instruction_memory.data[23] = 32'h00000013;   // 005c: nop
+            dut.instruction_memory.data[24] = 32'h000fa023;   // 0060: sw x0,0(x31)
+            dut.instruction_memory.data[25] = 32'h0000006f;   // 0064: j 64 <_start+0x64>
+        end
+    endtask
+
     task load_csr_alias;
         begin
             clear_imem;
@@ -559,6 +685,8 @@ module RV64IM72F_8SP_tb;
         // --------------------------------------------------------------------
         // 1. EXR operand hold: a forwarded operand must survive an exr_data_stall
         //    while its producer drains past retire (lui x5; nop*k; ld/addi x6; add x9)
+        //    retire freeze: addi x6; lui x5; nop*k; ld x6; add x9 must not lose x5
+        //    while an older write to x6 sits in retire
         // --------------------------------------------------------------------
         $display("[TB] 1. EXR operand hold: a forwarded operand must survive an exr_data_stall");
         load_ld_stall_rs2_gap2;
@@ -579,6 +707,18 @@ module RV64IM72F_8SP_tb;
         load_alu_stall_rs1_gap2;
         run_program("alu stall, rs1, gap 2");
         check_reg("alu stall, rs1, gap 2", 9, 64'h0000_0000_3773_0007);
+        load_freeze_rs2_gap1;
+        run_program("freeze, rs2, gap 1");
+        check_reg("freeze, rs2, gap 1", 9, 64'h0000_0000_3773_0007);
+        load_freeze_rs2_gap2;
+        run_program("freeze, rs2, gap 2");
+        check_reg("freeze, rs2, gap 2", 9, 64'h0000_0000_3773_0007);
+        load_freeze_rs1_gap1;
+        run_program("freeze, rs1, gap 1");
+        check_reg("freeze, rs1, gap 1", 9, 64'h0000_0000_3773_0007);
+        load_freeze_rs1_gap2;
+        run_program("freeze, rs1, gap 2");
+        check_reg("freeze, rs1, gap 2", 9, 64'h0000_0000_3773_0007);
 
         // --------------------------------------------------------------------
         // 2. IO-stage CSR address qualification: stores whose instr[31:20]
