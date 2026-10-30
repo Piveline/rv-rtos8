@@ -33,6 +33,7 @@ module Divider_DWORD #(
     reg div_by_zero_flag;
     reg div_overflow_flag;
     reg [XLEN-1:0] dividend_reg;
+    reg [XLEN-1:0] divisor_latch;
 
     wire [2*XLEN-1:0] shifted_rq;
     wire [XLEN:0] subtract_result;  // 65-bit subtract
@@ -68,6 +69,7 @@ module Divider_DWORD #(
                 div_by_zero_flag <= div_by_zero;
                 div_overflow_flag <= div_overflow;
                 dividend_reg <= dividend;
+                divisor_latch <= divisor;
             end
             case (state)
                 IDLE: begin
@@ -84,28 +86,28 @@ module Divider_DWORD #(
                     bit_counter <= 7'd64;
                     state <= CALCULATE;
                     if (is_signed) begin
-                        quotient_sign <= dividend[XLEN-1] ^ divisor[XLEN-1];
-                        remainder_sign <= dividend[XLEN-1];
+                        quotient_sign <= dividend_reg[XLEN-1] ^ divisor_latch[XLEN-1];
+                        remainder_sign <= dividend_reg[XLEN-1];
 
-                        if (dividend[XLEN-1]) begin
-                            remainder_quotient <= {{XLEN{1'b0}}, (~dividend + 1'b1)};
+                        if (dividend_reg[XLEN-1]) begin
+                            remainder_quotient <= {{XLEN{1'b0}}, (~dividend_reg + 1'b1)};
                         end
                         else begin
-                            remainder_quotient <= {{XLEN{1'b0}}, dividend};
+                            remainder_quotient <= {{XLEN{1'b0}}, dividend_reg};
                         end
 
-                        if (divisor[XLEN-1]) begin
-                            divisor_reg <= (~divisor + 1'b1);
+                        if (divisor_latch[XLEN-1]) begin
+                            divisor_reg <= (~divisor_latch + 1'b1);
                         end
                         else begin
-                            divisor_reg <= divisor;
+                            divisor_reg <= divisor_latch;
                         end
                     end
                     else begin
                         quotient_sign <= 1'b0;
                         remainder_sign <= 1'b0;
-                        remainder_quotient <= {{XLEN{1'b0}}, dividend};
-                        divisor_reg <= divisor;
+                        remainder_quotient <= {{XLEN{1'b0}}, dividend_reg};
+                        divisor_reg <= divisor_latch;
                     end
                 end
                 CALCULATE: begin
