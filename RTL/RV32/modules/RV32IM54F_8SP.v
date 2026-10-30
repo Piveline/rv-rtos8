@@ -2,6 +2,7 @@
 `include "./modules/headers/rf_wd_select.vh"
 `include "./modules/headers/alu_op.vh"
 `include "./modules/headers/opcode.vh"
+`include "./modules/headers/csr_funct3.vh"
 
 `include "./modules/ALU.v"
 `include "./modules/ALU_Controller.v"
@@ -599,21 +600,24 @@ module RV32IM54F8SP #(
     wire trap_handled = trap_target_latch == pc;
 
     wire [11:0] IO_csr_address = IO_instruction[31:20];
-    wire IO_valid_csr_address = (IO_csr_address == 12'hB00) ||
-                               (IO_csr_address == 12'hB02) ||
-                               (IO_csr_address == 12'hB80) ||
-                               (IO_csr_address == 12'hB82) ||
-                               (IO_csr_address == 12'hF11) ||
-                               (IO_csr_address == 12'hF12) ||
-                               (IO_csr_address == 12'hF14) ||
-                               (IO_csr_address == 12'h300) ||
-                               (IO_csr_address == 12'h301) ||
-                               (IO_csr_address == 12'h304) ||
-                               (IO_csr_address == 12'h305) ||
-                               (IO_csr_address == 12'h340) ||
-                               (IO_csr_address == 12'h341) ||
-                               (IO_csr_address == 12'h342) ||
-                               (IO_csr_address == 12'h344);
+    wire IO_is_csr_insn = (IO_instruction[6:0] == `OPCODE_ENVIRONMENT) &&
+                          (IO_instruction[14:12] != `CSR_NONE);
+    wire IO_valid_csr_address = IO_is_csr_insn &&
+                                ((IO_csr_address == 12'hB00) ||
+                                 (IO_csr_address == 12'hB02) ||
+                                 (IO_csr_address == 12'hB80) ||
+                                 (IO_csr_address == 12'hB82) ||
+                                 (IO_csr_address == 12'hF11) ||
+                                 (IO_csr_address == 12'hF12) ||
+                                 (IO_csr_address == 12'hF14) ||
+                                 (IO_csr_address == 12'h300) ||
+                                 (IO_csr_address == 12'h301) ||
+                                 (IO_csr_address == 12'h304) ||
+                                 (IO_csr_address == 12'h305) ||
+                                 (IO_csr_address == 12'h340) ||
+                                 (IO_csr_address == 12'h341) ||
+                                 (IO_csr_address == 12'h342) ||
+                                 (IO_csr_address == 12'h344));
 
     // =========================================================================
     // Module Instantiations
@@ -1058,6 +1062,8 @@ module RV32IM54F8SP #(
         .load_use_hazard(load_use_hazard),
         .jump(EXR_jump),                   // CHANGED: EX_jump - EXR_jump
         .exr_data_stall(exr_data_stall),
+        .branch_prediction_miss(branch_prediction_miss),
+        .branch_target(branch_target),
 
         .IF_pc(instruction_pc),
         .IF_pc_plus_4(instruction_pc_plus_4),
