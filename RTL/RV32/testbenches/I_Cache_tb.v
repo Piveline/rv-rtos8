@@ -32,6 +32,11 @@ module tb_ICache_RV32;
     integer test_fail_count;
     reg [31:0]  resp_data;
     integer     timeout;
+    integer     base_done;
+    integer     base_done_hi;
+    integer     issue_pass [1:5];
+    integer     issue_fail [1:5];
+    integer     idx;
 
     ICache_RV32 dut (
         .clk(clk), .reset(reset), .clk_enable(clk_enable),
@@ -71,6 +76,25 @@ module tb_ICache_RV32;
             axi_last_arlen        = 8'h0;
         end
     endtask
+
+    // External FENCE.I Done Monitor (No DUT internal access)
+    integer fence_done_cnt;
+    integer fence_done_hi_cnt;
+    reg     fence_done_d;
+
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            fence_done_cnt    <= 0;
+            fence_done_hi_cnt <= 0;
+            fence_done_d      <= 1'b0;
+        end else begin
+            fence_done_d <= fence_i_done;
+            if (fence_i_done) begin
+                fence_done_hi_cnt <= fence_done_hi_cnt + 1;
+                if (!fence_done_d) fence_done_cnt <= fence_done_cnt + 1;
+            end
+        end
+    end
 
     // TB AXI Slave Model
     reg [31:0] latched_araddr;
@@ -207,6 +231,93 @@ module tb_ICache_RV32;
         end
     endtask
 
+    task wait_cycles;
+        input integer n;
+        integer k;
+        begin
+            for (k = 0; k < n; k = k + 1) @(negedge clk);
+        end
+    endtask
+
+    task wait_fence_done;
+        input integer base_cnt;
+        input integer max_cycles;
+        integer k;
+        begin
+            k = 0;
+            while ((fence_done_cnt <= base_cnt) && (k < max_cycles)) begin
+                @(negedge clk);
+                k = k + 1;
+            end
+        end
+    endtask
+
+    // CPU Request with a cpu_flush window
+    // flush is high for flush_len cycles, starting flush_delay cycles after the request is driven
+    // The window is completed even after the response (flush held into IDLE)
+    task execute_req_flush;
+        input  [31:0] addr;
+        input  integer flush_delay;
+        input  integer flush_len;
+        output [31:0] rdata;
+        integer c;
+        reg     got_resp;
+        begin
+            cpu_req_valid = 1'b0;
+            c = 0;
+            while (cpu_ready && c < 100) begin
+                @(negedge clk);
+                c = c + 1;
+            end
+
+            @(negedge clk);
+            cpu_req_valid = 1'b1;
+            cpu_req_addr  = addr;
+            rdata         = 32'hDEAD_BEEF;
+            got_resp      = 1'b0;
+            c             = 0;
+
+            while ((!got_resp || (c < flush_delay + flush_len)) && c < 500) begin
+                cpu_flush = (c >= flush_delay) && (c < flush_delay + flush_len);
+                if (!got_resp && cpu_ready) begin
+                    got_resp      = 1'b1;
+                    rdata         = cpu_rdata;
+                    cpu_req_valid = 1'b0;
+                    cpu_req_addr  = 32'h0;
+                end
+                @(negedge clk);
+                c = c + 1;
+            end
+            cpu_flush = 1'b0;
+
+            if (!got_resp) begin
+                $display("[FAIL-TIMEOUT] cpu_ready never asserted for addr 0x%h", addr);
+                test_fail_count = test_fail_count + 1;
+                cpu_req_valid   = 1'b0;
+            end
+
+            @(negedge clk);
+        end
+    endtask
+
+    // Assertion tagged with the reported issue number (1..5)
+    task assert_issue;
+        input integer id;
+        input         condition;
+        input [511:0] msg;
+        begin
+            if (condition) begin
+                $display("  -> [PASS][ISSUE %0d] %0s", id, msg);
+                test_pass_count = test_pass_count + 1;
+                issue_pass[id]  = issue_pass[id] + 1;
+            end else begin
+                $display("  -> [FAIL][ISSUE %0d] %0s", id, msg);
+                test_fail_count = test_fail_count + 1;
+                issue_fail[id]  = issue_fail[id] + 1;
+            end
+        end
+    endtask
+
     // Main Test Execution
     initial begin
         clk             = 1'b0;
@@ -219,6 +330,10 @@ module tb_ICache_RV32;
         test_pass_count = 0;
         test_fail_count = 0;
         resp_data       = 32'h0;
+        for (idx = 1; idx <= 5; idx = idx + 1) begin
+            issue_pass[idx] = 0;
+            issue_fail[idx] = 0;
+        end
 
         #25 reset = 1'b0;
 
@@ -329,6 +444,204 @@ module tb_ICache_RV32;
         
         assert_test(axi_ar_handshake_seen && (axi_last_arlen == 8'd3) && (resp_data == 32'h8008_1000),
                     "FENCE.I forced Cache Miss & Refill on 0x8008_0000");
+
+        // ============================================================
+        // ISSUE-FIX VERIFICATION (fence_i_req / cpu_flush handling)
+        // ============================================================
+        $display("\n--------------------------------------------------------");
+        $display(" ISSUE-FIX VERIFICATION (fence_i_req / cpu_flush)");
+        $display("--------------------------------------------------------");
+
+        // TEST 10: [ISSUE 1] FENCE.I request must be held internally until done
+        $display("\n[TEST 10] FENCE.I req pulse is held internally until done");
+
+        // 10a: 1-cycle fence_i_req pulse while IDLE (req is low long before done)
+        execute_req(32'h8000_0200, resp_data);
+        base_done = fence_done_cnt;
+        @(negedge clk);
+        fence_i_req = 1'b1;
+        @(negedge clk);
+        fence_i_req = 1'b0;
+        wait_fence_done(base_done, 1000);
+        assert_issue(1, fence_done_cnt == base_done + 1,
+                     "1-cycle req in IDLE -> FENCE.I completes (done)");
+        wait_cycles(700);
+        assert_issue(1, fence_done_cnt == base_done + 1,
+                     "No extra done after 1-cycle req");
+        clear_axi_monitor();
+        execute_req(32'h8000_0200, resp_data);
+        assert_issue(1, axi_ar_handshake_seen && (resp_data == 32'h8000_1200),
+                     "Line invalidated after 1-cycle req (re-miss)");
+
+        // 10b: 1-cycle fence_i_req pulse while a miss refill is in flight
+        clear_axi_monitor();
+        base_done = fence_done_cnt;
+        cpu_req_valid = 1'b0;
+        @(negedge clk);
+        cpu_req_valid = 1'b1;
+        cpu_req_addr  = 32'h8000_0400;
+
+        timeout = 0;
+        while (!m_axi_arvalid && timeout < 100) begin
+            @(negedge clk);
+            timeout = timeout + 1;
+        end
+
+        fence_i_req = 1'b1;
+        @(negedge clk);
+        fence_i_req = 1'b0;
+
+        timeout = 0;
+        while (!cpu_ready && timeout < 500) begin
+            @(negedge clk);
+            timeout = timeout + 1;
+        end
+        resp_data     = cpu_rdata;
+        cpu_req_valid = 1'b0;
+        cpu_req_addr  = 32'h0;
+
+        assert_issue(1, resp_data == 32'h8000_1400,
+                     "Refill response intact while FENCE.I req is pending");
+        wait_fence_done(base_done, 1000);
+        assert_issue(1, fence_done_cnt == base_done + 1,
+                     "1-cycle req during miss is not lost (done)");
+        wait_cycles(700);
+        assert_issue(1, fence_done_cnt == base_done + 1,
+                     "No extra done after pending FENCE.I");
+        clear_axi_monitor();
+        execute_req(32'h8000_0400, resp_data);
+        assert_issue(1, axi_ar_handshake_seen && (resp_data == 32'h8000_1400),
+                     "Line invalidated by the pending FENCE.I (re-miss)");
+
+        // TEST 11: [ISSUE 2] fence_i_req held high must not re-run FENCE.I
+        $display("\n[TEST 11] FENCE.I req held high after done (no re-execution)");
+        execute_req(32'h8000_0600, resp_data);
+        base_done    = fence_done_cnt;
+        base_done_hi = fence_done_hi_cnt;
+        @(negedge clk);
+        fence_i_req = 1'b1;
+        wait_fence_done(base_done, 1000);
+        assert_issue(2, fence_done_cnt == base_done + 1,
+                     "FENCE.I completes with req held high");
+        wait_cycles(1500);
+        assert_issue(2, fence_done_cnt == base_done + 1,
+                     "No second FENCE.I while req stays high (1500 cycles)");
+        assert_issue(2, fence_done_hi_cnt == base_done_hi + 1,
+                     "done is a single 1-cycle pulse");
+        fence_i_req = 1'b0;
+        wait_cycles(3);
+        clear_axi_monitor();
+        execute_req(32'h8000_0600, resp_data);
+        assert_issue(2, axi_ar_handshake_seen && (resp_data == 32'h8000_1600),
+                     "Cache resumes after req drops (line was invalidated)");
+        wait_cycles(700);
+        assert_issue(2, fence_done_cnt == base_done + 1,
+                     "No FENCE.I re-run after req dropped");
+
+        // TEST 12: [ISSUE 3] cpu_flush while IDLE must be released immediately
+        $display("\n[TEST 12] cpu_flush while IDLE is released immediately");
+
+        // 12a: 1-cycle flush with no request, then a miss
+        wait_cycles(2);
+        cpu_flush = 1'b1;
+        @(negedge clk);
+        cpu_flush = 1'b0;
+        wait_cycles(3);
+        execute_req(32'h8000_0800, resp_data);
+        assert_issue(3, resp_data == 32'h8000_1800,
+                     "Miss after IDLE flush is not squashed");
+
+        // 12b: flush in IDLE, request driven in the very next cycle
+        wait_cycles(2);
+        cpu_flush = 1'b1;
+        @(negedge clk);
+        cpu_flush     = 1'b0;
+        cpu_req_valid = 1'b1;
+        cpu_req_addr  = 32'h8000_0A00;
+        timeout = 0;
+        while (!cpu_ready && timeout < 500) begin
+            @(negedge clk);
+            timeout = timeout + 1;
+        end
+        resp_data     = cpu_rdata;
+        cpu_req_valid = 1'b0;
+        cpu_req_addr  = 32'h0;
+        @(negedge clk);
+        assert_issue(3, resp_data == 32'h8000_1A00,
+                     "Miss right after IDLE flush is not squashed");
+
+        // 12c: hit after IDLE flush
+        wait_cycles(2);
+        cpu_flush = 1'b1;
+        @(negedge clk);
+        cpu_flush = 1'b0;
+        execute_req(32'h8000_0804, resp_data);
+        assert_issue(3, resp_data == 32'h8000_1804,
+                     "Hit after IDLE flush is not squashed");
+
+        // TEST 13: [ISSUE 4/5] cpu_flush during a hit is released at the hit response
+        $display("\n[TEST 13] cpu_flush during HIT is released at the hit response");
+
+        // 13a: 1-cycle flush in the LOOKUP cycle of a hit
+        execute_req_flush(32'h8000_0800, 1, 1, resp_data);
+        assert_issue(4, resp_data == 32'h0000_0013,
+                     "Hit response squashed to NOP by flush");
+        clear_axi_monitor();
+        execute_req(32'h8000_0C00, resp_data);
+        assert_issue(5, axi_ar_handshake_seen && (resp_data == 32'h8000_1C00),
+                     "Next miss after flushed hit is not squashed");
+        clear_axi_monitor();
+        execute_req(32'h8000_0800, resp_data);
+        assert_issue(4, !axi_ar_handshake_seen && (resp_data == 32'h8000_1800),
+                     "Next hit after flushed hit is not squashed");
+
+        // 13b: flush held high across the hit response and into IDLE
+        execute_req_flush(32'h8000_0804, 1, 5, resp_data);
+        assert_issue(4, resp_data == 32'h0000_0013,
+                     "Hit squashed with multi-cycle flush");
+        clear_axi_monitor();
+        execute_req(32'h8000_0E00, resp_data);
+        assert_issue(5, axi_ar_handshake_seen && (resp_data == 32'h8000_1E00),
+                     "Miss after multi-cycle flush is not squashed");
+
+        // TEST 14: [ISSUE 5] flush during a refill must not leak into later requests
+        $display("\n[TEST 14] cpu_flush during MISS refill does not leak into next miss");
+
+        // 14a: flush pulse early in the refill, released before the response
+        execute_req_flush(32'h8000_1000, 2, 3, resp_data);
+        assert_issue(5, resp_data == 32'h0000_0013,
+                     "Refill response squashed (flush latched in flight)");
+        clear_axi_monitor();
+        execute_req(32'h8000_1000, resp_data);
+        assert_issue(5, !axi_ar_handshake_seen && (resp_data == 32'h8000_2000),
+                     "Squashed refill still allocated the line (HIT)");
+        clear_axi_monitor();
+        execute_req(32'h8000_1400, resp_data);
+        assert_issue(5, axi_ar_handshake_seen && (resp_data == 32'h8000_2400),
+                     "Next miss after squashed refill is not squashed");
+
+        // 14b: flush held through the refill response and into IDLE
+        execute_req_flush(32'h8000_1800, 2, 12, resp_data);
+        assert_issue(5, resp_data == 32'h0000_0013,
+                     "Refill response squashed (flush held past response)");
+        clear_axi_monitor();
+        execute_req(32'h8000_1C00, resp_data);
+        assert_issue(5, axi_ar_handshake_seen && (resp_data == 32'h8000_2C00),
+                     "Next miss after held flush is not squashed");
+
+        $display("\n========================================================");
+        $display(" ISSUE-FIX SUMMARY (PASS = problem is corrected)");
+        $display("========================================================");
+        $display("  [ISSUE 1] fence_i_req held internally until done   : %0s (pass=%0d fail=%0d)",
+                 (issue_fail[1] == 0 && issue_pass[1] > 0) ? "PASS" : "FAIL", issue_pass[1], issue_fail[1]);
+        $display("  [ISSUE 2] no FENCE.I re-run while req stays high   : %0s (pass=%0d fail=%0d)",
+                 (issue_fail[2] == 0 && issue_pass[2] > 0) ? "PASS" : "FAIL", issue_pass[2], issue_fail[2]);
+        $display("  [ISSUE 3] IDLE cpu_flush released immediately      : %0s (pass=%0d fail=%0d)",
+                 (issue_fail[3] == 0 && issue_pass[3] > 0) ? "PASS" : "FAIL", issue_pass[3], issue_fail[3]);
+        $display("  [ISSUE 4] hit-time cpu_flush released at response  : %0s (pass=%0d fail=%0d)",
+                 (issue_fail[4] == 0 && issue_pass[4] > 0) ? "PASS" : "FAIL", issue_pass[4], issue_fail[4]);
+        $display("  [ISSUE 5] no stale flush squashing the next miss   : %0s (pass=%0d fail=%0d)",
+                 (issue_fail[5] == 0 && issue_pass[5] > 0) ? "PASS" : "FAIL", issue_pass[5], issue_fail[5]);
 
         $display("\n========================================================");
         $display("SIMULATION FINISHED");
