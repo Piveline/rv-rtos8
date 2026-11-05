@@ -146,11 +146,24 @@ module DataCache_tb;
     // ------------------------------------------------------------
     integer ar_count, aw_count;
     reg [7:0] last_arlen;
+    integer fence_done_count;
+    integer inval_done_count;
+
+    always @(posedge clk) begin
+        if (!reset) begin
+            if (fence_i_done) fence_done_count = fence_done_count + 1;
+            if (inval_done) inval_done_count = inval_done_count + 1;
+        end
+    end
 
     always @(posedge clk) begin
         if (!reset) begin
             if (m_axi_arvalid && m_axi_arready) begin
                 ar_count = ar_count + 1;
+                if (aw_busy || b_pend) begin
+                    $display("[FAIL-AXI] AR issued before BRESP of the previous write");
+                    fail_count = fail_count + 1;
+                end
                 last_arlen = m_axi_arlen;
                 if (m_axi_arsize != 3'b011 || m_axi_arburst != 2'b01) begin
                     $display("[FAIL-AXI] ARSIZE/ARBURST wrong");
@@ -370,6 +383,7 @@ module DataCache_tb;
             else sh_u[addr[15:3]] = merge8(sh_u[addr[15:3]], {wdata, wdata}, s8);
         end
     endtask
+
     task do_maint(input inval); // inval=0 : FENCE.I (CLEAN), inval=1 : cold flush
         integer tout, width;
         begin
@@ -448,6 +462,8 @@ module DataCache_tb;
         fail_count = 0;
         ar_count = 0;
         aw_count = 0;
+        fence_done_count = 0;
+        inval_done_count = 0;
         for (k = 0; k < 65536; k = k + 1) begin mem_c[k] = {$random, $random}; sh_c[k] = mem_c[k]; end
         for (k = 0; k < 8192; k = k + 1) begin mem_u[k] = {$random, $random}; sh_u[k] = mem_u[k]; end
 
@@ -557,6 +573,11 @@ module DataCache_tb;
             miss0 = perf_miss;
             do_load(mk_addr(6, 20, 8), ok);
             check(ok && perf_miss == miss0, "line still valid after FENCE.I (hit)");
+            do_load(mk_addr(9, 22, 0), ok); // clean line
+            do_maint(1'b0);
+            miss0 = perf_miss;
+            do_load(mk_addr(9, 22, 0), ok);
+            check(ok && perf_miss == miss0, "clean line still valid after FENCE.I (hit)");
             wb0 = perf_wb;
             do_maint(1'b0);
             check(perf_wb == wb0, "second FENCE.I has nothing to write back");
@@ -569,10 +590,66 @@ module DataCache_tb;
             miss0 = perf_miss;
             do_load(mk_addr(7, 30, 0), ok);
             check(ok && perf_miss == miss0 + 1, "line invalid after INVAL (miss)");
+            do_load(mk_addr(9, 31, 0), ok); // clean line
+            do_maint(1'b1);
+            miss0 = perf_miss;
+            do_load(mk_addr(9, 31, 0), ok);
+            check(ok && perf_miss == miss0 + 1, "clean line invalid after INVAL (miss)");
+
+            // -------- TEST 10 : req held high after done (no re-run) --------
+            $display("\n[TEST 10] FENCE.I / INVAL req held 50 cycles after done");
+            do_store(mk_addr(8, 40, 0), 32'hA5A5_0011, 4'hF);
+            n = fence_done_count;
+            wb0 = perf_wb;
+            @(negedge clk);
+            fence_i_req = 1'b1;
+            while (fence_done_count == n) @(negedge clk);
+            repeat (50) @(negedge clk);
+            fence_i_req = 1'b0;
+            repeat (NSETS * 4 + 100) @(negedge clk); // longer than one full walk, so a re-run would finish
+            check(fence_done_count == n + 1 && perf_wb == wb0 + 1, "FENCE.I done pulsed once, no re-run while req held");
+            do_load(mk_addr(8, 40, 0), ok);
+            check(ok, "cache accepts requests again after req drops");
+            n = inval_done_count;
+            @(negedge clk);
+            inval_req = 1'b1;
+            while (inval_done_count == n) @(negedge clk);
+            repeat (50) @(negedge clk);
+            inval_req = 1'b0;
+            repeat (NSETS * 4 + 100) @(negedge clk);
+            check(inval_done_count == n + 1, "INVAL done pulsed once, no re-run while req held");
+
+            // -------- TEST 11 : last set, both ways --------
+            $display("\n[TEST 11] FENCE.I / INVAL cover the last set (both ways)");
+            do_store(mk_addr(10, NSETS - 1, 0), 32'h1A57_0000, 4'hF);
+            do_store(mk_addr(11, NSETS - 1, 4), 32'h1A57_0001, 4'hF);
+            do_maint(1'b0);
+            check_mem_vs_shadow("FENCE.I wrote back both ways of the last set");
+            do_maint(1'b1);
+            miss0 = perf_miss;
+            do_load(mk_addr(10, NSETS - 1, 0), ok);
+            do_load(mk_addr(11, NSETS - 1, 4), ok);
+            check(ok && perf_miss == miss0 + 2, "INVAL invalidated both ways of the last set");
+
+            // -------- TEST 12 : performance counters --------
+            $display("\n[TEST 12] Performance counters (stall / clear)");
+            do_load(mk_addr(12, 60, 0), ok); // warm up
+            k = perf_stall;
+            do_load(mk_addr(12, 60, 0), ok); // hit
+            check(perf_stall == k, "hit adds no stall cycles");
+            do_load(mk_addr(13, 61, 0), ok); // miss
+            check(perf_stall > k + 3, "miss adds stall cycles");
+            @(negedge clk);
+            perf_clear = 1'b1;
+            @(negedge clk);
+            perf_clear = 1'b0;
+            check(perf_access == 0 && perf_miss == 0 && perf_wb == 0 && perf_stall == 0, "perf_clear resets all counters");
+            do_load(mk_addr(13, 61, 0), ok);
+            check(perf_access == 1 && perf_miss == 0, "counters count again after clear");
         end
 
-        // -------- TEST 10 : random --------
-        $display("\n[TEST 10] Random %0d operations (conflict-heavy)", RAND_OPS);
+        // -------- TEST 13 : random --------
+        $display("\n[TEST 13] Random %0d operations (conflict-heavy)", RAND_OPS);
         all_ok = 1;
         for (k = 0; k < RAND_OPS; k = k + 1) begin
             op = $random & 15;
