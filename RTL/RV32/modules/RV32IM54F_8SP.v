@@ -496,6 +496,18 @@ module RV32IM54F8SP #(
     wire mem_ddr_region = (MEM_alu_result[31:29] == 3'b100);
     wire data_memory_write_done;
 
+    localparam DATA_CACHE_IDLE = 2'd0; // no request in flight
+    localparam DATA_CACHE_WAIT = 2'd1; // request sent, waiting for cpu_ready
+    localparam DATA_CACHE_HOLD = 2'd2; // answered, MEM still stalled by something else
+    localparam DATA_CACHE_DRAIN = 2'd3; // MEM instruction was flushed, drop the answer
+
+    reg [1:0] data_cache_state;
+    reg [31:0] data_cache_hold_data;
+
+    wire data_cache_cpu_req_valid;
+    wire [31:0] data_cache_cpu_rdata;
+    wire data_cache_cpu_ready;
+
     // MMIO Interface logics
     reg mmio_hit_reg;
     always @(posedge clk or posedge reset) begin
@@ -509,7 +521,9 @@ module RV32IM54F8SP #(
         end
 
     wire [XLEN-1:0] data_memory_read_data_muxed;
-    assign data_memory_read_data_muxed = mmio_hit_reg ? MMIO_read_data : data_memory_read_data;
+    wire [31:0] data_cache_load_data = (data_cache_state == DATA_CACHE_HOLD) ? data_cache_hold_data : data_cache_cpu_rdata;
+    assign data_memory_read_data_muxed = mem_ddr_region ? data_cache_load_data :
+        mmio_hit_reg ? MMIO_read_data : data_memory_read_data;
 
     // =========================================================================
     // EXR stage combinational logic: ALU source selection + forwarding
@@ -799,17 +813,6 @@ module RV32IM54F8SP #(
     // cache instead of DataMemory. The request is sent once, and the whole
     // pipeline is stalled through write_done until the cache answers.
     // =========================================================================
-    localparam DATA_CACHE_IDLE = 2'd0;  // no request in flight
-    localparam DATA_CACHE_WAIT = 2'd1;  // request sent, waiting for cpu_ready
-    localparam DATA_CACHE_HOLD = 2'd2;  // answered, MEM still stalled by something else
-    localparam DATA_CACHE_DRAIN = 2'd3; // MEM instruction was flushed, drop the answer
-
-    reg [1:0] data_cache_state;
-    reg [31:0] data_cache_hold_data;
-
-    wire data_cache_cpu_req_valid;
-    wire [31:0] data_cache_cpu_rdata;
-    wire data_cache_cpu_ready;
     wire data_cache_fence_i_done;
     wire data_cache_inval_done;
     wire [31:0] data_cache_perf_access;
