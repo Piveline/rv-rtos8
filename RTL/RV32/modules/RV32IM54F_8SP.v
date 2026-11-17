@@ -12,6 +12,7 @@
 `include "./modules/CSR_File.v"
 `include "./modules/Control_Unit.v"
 `include "./modules/Data_Memory.v"
+`include "./modules/Data_Cache.v"
 `include "./modules/Exception_Detector.v"
 `include "./modules/Forward_Unit.v"
 `include "./modules/Hazard_Unit.v"
@@ -41,12 +42,41 @@ module RV32IM54F8SP #(
     input timer_interrupt_pending,
     input [XLEN-1:0] MMIO_read_data,
 
+    // Data Cache AXI4 master (to SmartConnect S01 -> MIG -> DDR3)
+    input wire data_cache_m_axi_awready,
+    input wire data_cache_m_axi_wready,
+    input wire [1:0] data_cache_m_axi_bresp,
+    input wire data_cache_m_axi_bvalid,
+    input wire data_cache_m_axi_arready,
+    input wire [63:0] data_cache_m_axi_rdata,
+    input wire [1:0] data_cache_m_axi_rresp,
+    input wire data_cache_m_axi_rlast,
+    input wire data_cache_m_axi_rvalid,
+
      // IO Interface
     
     output wire [31:0] retire_instruction,
     output wire [XLEN-1:0] MMIO_data_memory_write_data,
     output wire [XLEN-1:0] MMIO_data_memory_address,
-    output wire MMIO_data_memory_write_enable
+    output wire MMIO_data_memory_write_enable,
+
+    // Data Cache AXI4 master
+    output wire [31:0] data_cache_m_axi_awaddr,
+    output wire [7:0] data_cache_m_axi_awlen,
+    output wire [2:0] data_cache_m_axi_awsize,
+    output wire [1:0] data_cache_m_axi_awburst,
+    output wire data_cache_m_axi_awvalid,
+    output wire [63:0] data_cache_m_axi_wdata,
+    output wire [7:0] data_cache_m_axi_wstrb,
+    output wire data_cache_m_axi_wlast,
+    output wire data_cache_m_axi_wvalid,
+    output wire data_cache_m_axi_bready,
+    output wire [31:0] data_cache_m_axi_araddr,
+    output wire [7:0] data_cache_m_axi_arlen,
+    output wire [2:0] data_cache_m_axi_arsize,
+    output wire [1:0] data_cache_m_axi_arburst,
+    output wire data_cache_m_axi_arvalid,
+    output wire data_cache_m_axi_rready
 );
 
     // Program Counter and PC Plus 4
@@ -757,6 +787,68 @@ module RV32IM54F8SP #(
 
         .write_done(write_done),
         .read_data(data_memory_read_data)
+    );
+
+    // =========================================================================
+    // Data Cache (DDR region 0x8000_0000 ~ 0x9FFF_FFFF)
+    // =========================================================================
+    wire data_cache_cpu_req_valid;
+    wire [31:0] data_cache_cpu_rdata;
+    wire data_cache_cpu_ready;
+    wire data_cache_fence_i_done;
+    wire data_cache_inval_done;
+    wire [31:0] data_cache_perf_access;
+    wire [31:0] data_cache_perf_miss;
+    wire [31:0] data_cache_perf_wb;
+    wire [31:0] data_cache_perf_stall;
+
+    assign data_cache_cpu_req_valid = 1'b0;
+
+    DataCache data_cache (
+        .clk(clk),
+        .reset(reset),
+        .clk_enable(clk_enable),
+        .cpu_req_valid(data_cache_cpu_req_valid),
+        .cpu_req_we(MEM_memory_write),
+        .cpu_req_addr(MEM_alu_result),
+        .cpu_req_wdata(data_memory_write_data),
+        .cpu_req_wstrb(write_mask),
+        .fence_i_req(1'b0),
+        .inval_req(1'b0),
+        .perf_clear(1'b0),
+        .m_axi_awready(data_cache_m_axi_awready),
+        .m_axi_wready(data_cache_m_axi_wready),
+        .m_axi_bresp(data_cache_m_axi_bresp),
+        .m_axi_bvalid(data_cache_m_axi_bvalid),
+        .m_axi_arready(data_cache_m_axi_arready),
+        .m_axi_rdata(data_cache_m_axi_rdata),
+        .m_axi_rresp(data_cache_m_axi_rresp),
+        .m_axi_rlast(data_cache_m_axi_rlast),
+        .m_axi_rvalid(data_cache_m_axi_rvalid),
+        .cpu_rdata(data_cache_cpu_rdata),
+        .cpu_ready(data_cache_cpu_ready),
+        .fence_i_done(data_cache_fence_i_done),
+        .inval_done(data_cache_inval_done),
+        .perf_access(data_cache_perf_access),
+        .perf_miss(data_cache_perf_miss),
+        .perf_wb(data_cache_perf_wb),
+        .perf_stall(data_cache_perf_stall),
+        .m_axi_awaddr(data_cache_m_axi_awaddr),
+        .m_axi_awlen(data_cache_m_axi_awlen),
+        .m_axi_awsize(data_cache_m_axi_awsize),
+        .m_axi_awburst(data_cache_m_axi_awburst),
+        .m_axi_awvalid(data_cache_m_axi_awvalid),
+        .m_axi_wdata(data_cache_m_axi_wdata),
+        .m_axi_wstrb(data_cache_m_axi_wstrb),
+        .m_axi_wlast(data_cache_m_axi_wlast),
+        .m_axi_wvalid(data_cache_m_axi_wvalid),
+        .m_axi_bready(data_cache_m_axi_bready),
+        .m_axi_araddr(data_cache_m_axi_araddr),
+        .m_axi_arlen(data_cache_m_axi_arlen),
+        .m_axi_arsize(data_cache_m_axi_arsize),
+        .m_axi_arburst(data_cache_m_axi_arburst),
+        .m_axi_arvalid(data_cache_m_axi_arvalid),
+        .m_axi_rready(data_cache_m_axi_rready)
     );
 
     ExceptionDetector exception_detector (
