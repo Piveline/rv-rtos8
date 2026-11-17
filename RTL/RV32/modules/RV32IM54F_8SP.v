@@ -498,11 +498,10 @@ module RV32IM54F8SP #(
 
     localparam DATA_CACHE_IDLE = 2'd0; // no request in flight
     localparam DATA_CACHE_WAIT = 2'd1; // request sent, waiting for cpu_ready
-    localparam DATA_CACHE_HOLD = 2'd2; // answered, MEM still stalled by something else
+    localparam DATA_CACHE_HOLD = 2'd2; // answered, MEM still stalled by something else (cpu_rdata is kept by the cache)
     localparam DATA_CACHE_DRAIN = 2'd3; // MEM instruction was flushed, drop the answer
 
     reg [1:0] data_cache_state;
-    reg [31:0] data_cache_hold_data;
 
     wire data_cache_cpu_req_valid;
     wire [31:0] data_cache_cpu_rdata;
@@ -521,8 +520,7 @@ module RV32IM54F8SP #(
         end
 
     wire [XLEN-1:0] data_memory_read_data_muxed;
-    wire [31:0] data_cache_load_data = (data_cache_state == DATA_CACHE_HOLD) ? data_cache_hold_data : data_cache_cpu_rdata;
-    assign data_memory_read_data_muxed = mem_ddr_region ? data_cache_load_data :
+    assign data_memory_read_data_muxed = mem_ddr_region ? data_cache_cpu_rdata :
         mmio_hit_reg ? MMIO_read_data : data_memory_read_data;
 
     // =========================================================================
@@ -838,7 +836,6 @@ module RV32IM54F8SP #(
     always @(posedge clk or posedge reset) begin
         if (reset) begin
             data_cache_state <= DATA_CACHE_IDLE;
-            data_cache_hold_data <= 32'h0;
         end
         else if (clk_enable) begin
             case (data_cache_state)
@@ -848,8 +845,7 @@ module RV32IM54F8SP #(
                 end
                 DATA_CACHE_WAIT: begin
                     if (data_cache_cpu_ready) begin
-                        // answer is used this cycle; keep it if MEM cannot move yet
-                        data_cache_hold_data <= data_cache_cpu_rdata;
+                        // answer is used this cycle; wait in HOLD if MEM cannot move yet
                         if (!EX_MEM_stall || EX_MEM_flush || MEM_WB_flush)
                             data_cache_state <= DATA_CACHE_IDLE;
                         else
