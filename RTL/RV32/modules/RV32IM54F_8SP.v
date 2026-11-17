@@ -492,6 +492,10 @@ module RV32IM54F8SP #(
     assign MMIO_data_memory_write_enable = MEM_memory_write;
     assign MMIO_data_memory_address = MEM_alu_result;
 
+    // DDR region (0x8000_0000 ~ 0x9FFF_FFFF) is served by the data cache
+    wire mem_ddr_region = (MEM_alu_result[31:29] == 3'b100);
+    wire data_memory_write_done;
+
     // MMIO Interface logics
     reg mmio_hit_reg;
     always @(posedge clk or posedge reset) begin
@@ -779,19 +783,30 @@ module RV32IM54F8SP #(
         .clk(clk),
         .clk_enable(clk_enable),
         .read_stall(EX_MEM_stall),
-        .write_enable(MEM_memory_write && !mmio_hit_reg),
+        .write_enable(MEM_memory_write && !mmio_hit_reg && !mem_ddr_region),
         .address(data_memory_address),
         .write_data(data_memory_write_data),
         .write_mask(write_mask),
         .rom_read_data(rom_read_data),
 
-        .write_done(write_done),
+        .write_done(data_memory_write_done),
         .read_data(data_memory_read_data)
     );
 
     // =========================================================================
     // Data Cache (DDR region 0x8000_0000 ~ 0x9FFF_FFFF)
+    // A load/store in MEM whose address is in the DDR region goes to the data
+    // cache instead of DataMemory. The request is sent once, and the whole
+    // pipeline is stalled through write_done until the cache answers.
     // =========================================================================
+    localparam DATA_CACHE_IDLE = 2'd0;  // no request in flight
+    localparam DATA_CACHE_WAIT = 2'd1;  // request sent, waiting for cpu_ready
+    localparam DATA_CACHE_HOLD = 2'd2;  // answered, MEM still stalled by something else
+    localparam DATA_CACHE_DRAIN = 2'd3; // MEM instruction was flushed, drop the answer
+
+    reg [1:0] data_cache_state;
+    reg [31:0] data_cache_hold_data;
+
     wire data_cache_cpu_req_valid;
     wire [31:0] data_cache_cpu_rdata;
     wire data_cache_cpu_ready;
@@ -802,7 +817,58 @@ module RV32IM54F8SP #(
     wire [31:0] data_cache_perf_wb;
     wire [31:0] data_cache_perf_stall;
 
-    assign data_cache_cpu_req_valid = 1'b0;
+    // misaligned accesses trap in MEM and must not reach the cache
+    wire mem_misaligned = (MEM_funct3[1:0] == 2'b10) ? (MEM_alu_result[1:0] != 2'b00) :
+        (MEM_funct3[1:0] == 2'b01) ? MEM_alu_result[0] : 1'b0;
+    wire data_cache_access = (MEM_memory_read || MEM_memory_write) && mem_ddr_region && !mem_misaligned;
+
+    // send once, only for an instruction that is not being flushed
+    assign data_cache_cpu_req_valid = (data_cache_state == DATA_CACHE_IDLE) && data_cache_access && !MEM_WB_flush;
+
+    wire data_cache_busy = data_cache_cpu_req_valid ||
+        ((data_cache_state == DATA_CACHE_WAIT) && !data_cache_cpu_ready) ||
+        ((data_cache_state == DATA_CACHE_DRAIN) && data_cache_access);
+
+    // stall the pipeline while DataMemory or the data cache is busy
+    assign write_done = data_memory_write_done && !data_cache_busy;
+
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            data_cache_state <= DATA_CACHE_IDLE;
+            data_cache_hold_data <= 32'h0;
+        end
+        else if (clk_enable) begin
+            case (data_cache_state)
+                DATA_CACHE_IDLE: begin
+                    if (data_cache_cpu_req_valid)
+                        data_cache_state <= DATA_CACHE_WAIT;
+                end
+                DATA_CACHE_WAIT: begin
+                    if (data_cache_cpu_ready) begin
+                        // answer is used this cycle; keep it if MEM cannot move yet
+                        data_cache_hold_data <= data_cache_cpu_rdata;
+                        if (!EX_MEM_stall || EX_MEM_flush || MEM_WB_flush)
+                            data_cache_state <= DATA_CACHE_IDLE;
+                        else
+                            data_cache_state <= DATA_CACHE_HOLD;
+                    end
+                    else if (!EX_MEM_stall || EX_MEM_flush || MEM_WB_flush) begin
+                        // MEM instruction left before the answer (trap flush or standby)
+                        data_cache_state <= DATA_CACHE_DRAIN;
+                    end
+                end
+                DATA_CACHE_HOLD: begin
+                    if (!EX_MEM_stall || EX_MEM_flush || MEM_WB_flush)
+                        data_cache_state <= DATA_CACHE_IDLE;
+                end
+                DATA_CACHE_DRAIN: begin
+                    if (data_cache_cpu_ready)
+                        data_cache_state <= DATA_CACHE_IDLE;
+                end
+                default: data_cache_state <= DATA_CACHE_IDLE;
+            endcase
+        end
+    end
 
     DataCache data_cache (
         .clk(clk),
