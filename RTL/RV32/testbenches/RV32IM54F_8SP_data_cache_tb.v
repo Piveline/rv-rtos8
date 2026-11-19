@@ -1,9 +1,13 @@
 `timescale 1ns / 1ps
 
+`include "./modules/Dummy_DDR_Memory.v"
+
 /*
  * Core + Data Cache integration testbench
  * - RV32IM54F8SP core with the data cache on the DDR region (0x8000_0000 ~)
- * - AXI4 slave DDR model with random latency (128KB window at 0x8000_0000)
+ * - DDR side, 128KB window at 0x8000_0000, chosen per round
+ *   round 0, 1 : TB AXI4 slave model with random latency
+ *   round 2    : DummyDDRMemory (synthesizable stand-in, fixed 60-cycle read / write latency)
  * - Programs are assembled with llvm-mc (rv32im) and loaded into the instruction memory
  * - Each program ends with a store to DONE_ADDR, then registers / DDR contents are checked
  */
@@ -13,6 +17,8 @@ module RV32IM54F_8SP_data_cache_tb;
     localparam [XLEN-1:0] DONE_ADDR = 32'h1001_0000;
     localparam integer TIMEOUT = 20000;
     localparam [31:0] HALT = 32'h0000_006F; // jal x0, 0
+    localparam integer DUMMY_READ_LATENCY = 60;
+    localparam integer DUMMY_WRITE_LATENCY = 60;
 
     reg clk;
     reg reset;
@@ -28,25 +34,25 @@ module RV32IM54F_8SP_data_cache_tb;
     wire [2:0] m_axi_awsize;
     wire [1:0] m_axi_awburst;
     wire m_axi_awvalid;
-    reg m_axi_awready;
+    wire m_axi_awready;
     wire [63:0] m_axi_wdata;
     wire [7:0] m_axi_wstrb;
     wire m_axi_wlast;
     wire m_axi_wvalid;
-    reg m_axi_wready;
-    reg [1:0] m_axi_bresp;
-    reg m_axi_bvalid;
+    wire m_axi_wready;
+    wire [1:0] m_axi_bresp;
+    wire m_axi_bvalid;
     wire m_axi_bready;
     wire [31:0] m_axi_araddr;
     wire [7:0] m_axi_arlen;
     wire [2:0] m_axi_arsize;
     wire [1:0] m_axi_arburst;
     wire m_axi_arvalid;
-    reg m_axi_arready;
-    reg [63:0] m_axi_rdata;
-    reg [1:0] m_axi_rresp;
-    reg m_axi_rlast;
-    reg m_axi_rvalid;
+    wire m_axi_arready;
+    wire [63:0] m_axi_rdata;
+    wire [1:0] m_axi_rresp;
+    wire m_axi_rlast;
+    wire m_axi_rvalid;
     wire m_axi_rready;
 
     integer test_count;
@@ -108,6 +114,120 @@ module RV32IM54F_8SP_data_cache_tb;
     end
 
     // ------------------------------------------------------------------------
+    // DDR side select : TB model (random latency) or DummyDDRMemory (fixed latency)
+    // ------------------------------------------------------------------------
+    reg use_dummy_ddr;
+
+    reg model_awready;
+    reg model_wready;
+    reg [1:0] model_bresp;
+    reg model_bvalid;
+    reg model_arready;
+    reg [63:0] model_rdata;
+    reg [1:0] model_rresp;
+    reg model_rlast;
+    reg model_rvalid;
+    wire model_awvalid = m_axi_awvalid && !use_dummy_ddr;
+    wire model_arvalid = m_axi_arvalid && !use_dummy_ddr;
+
+    wire dummy_awready;
+    wire dummy_wready;
+    wire [1:0] dummy_bresp;
+    wire dummy_bvalid;
+    wire dummy_arready;
+    wire [63:0] dummy_rdata;
+    wire [1:0] dummy_rresp;
+    wire dummy_rlast;
+    wire dummy_rvalid;
+
+    DummyDDRMemory #(
+        .ADDRESS_WIDTH(14),
+        .READ_LATENCY(DUMMY_READ_LATENCY),
+        .WRITE_LATENCY(DUMMY_WRITE_LATENCY)
+    ) dummy_ddr_memory (
+        .clk(clk),
+        .reset(reset),
+        .s_axi_awaddr(m_axi_awaddr),
+        .s_axi_awlen(m_axi_awlen),
+        .s_axi_awsize(m_axi_awsize),
+        .s_axi_awburst(m_axi_awburst),
+        .s_axi_awvalid(m_axi_awvalid && use_dummy_ddr),
+        .s_axi_awready(dummy_awready),
+        .s_axi_wdata(m_axi_wdata),
+        .s_axi_wstrb(m_axi_wstrb),
+        .s_axi_wlast(m_axi_wlast),
+        .s_axi_wvalid(m_axi_wvalid && use_dummy_ddr),
+        .s_axi_wready(dummy_wready),
+        .s_axi_bresp(dummy_bresp),
+        .s_axi_bvalid(dummy_bvalid),
+        .s_axi_bready(m_axi_bready && use_dummy_ddr),
+        .s_axi_araddr(m_axi_araddr),
+        .s_axi_arlen(m_axi_arlen),
+        .s_axi_arsize(m_axi_arsize),
+        .s_axi_arburst(m_axi_arburst),
+        .s_axi_arvalid(m_axi_arvalid && use_dummy_ddr),
+        .s_axi_arready(dummy_arready),
+        .s_axi_rdata(dummy_rdata),
+        .s_axi_rresp(dummy_rresp),
+        .s_axi_rlast(dummy_rlast),
+        .s_axi_rvalid(dummy_rvalid),
+        .s_axi_rready(m_axi_rready && use_dummy_ddr)
+    );
+
+    assign m_axi_awready = use_dummy_ddr ? dummy_awready : model_awready;
+    assign m_axi_wready = use_dummy_ddr ? dummy_wready : model_wready;
+    assign m_axi_bresp = use_dummy_ddr ? dummy_bresp : model_bresp;
+    assign m_axi_bvalid = use_dummy_ddr ? dummy_bvalid : model_bvalid;
+    assign m_axi_arready = use_dummy_ddr ? dummy_arready : model_arready;
+    assign m_axi_rdata = use_dummy_ddr ? dummy_rdata : model_rdata;
+    assign m_axi_rresp = use_dummy_ddr ? dummy_rresp : model_rresp;
+    assign m_axi_rlast = use_dummy_ddr ? dummy_rlast : model_rlast;
+    assign m_axi_rvalid = use_dummy_ddr ? dummy_rvalid : model_rvalid;
+
+    // DummyDDRMemory latency check (cycles counted from the handshake edge)
+    integer read_latency_start;
+    integer write_latency_start;
+    integer read_latency_error;
+    integer write_latency_error;
+    integer read_latency_seen;
+    integer write_latency_seen;
+    integer read_latency_count;
+    integer write_latency_count;
+    reg read_first_beat;
+    integer cycle_now;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            cycle_now = 0;
+            read_first_beat = 1'b0;
+        end
+        else begin
+            cycle_now = cycle_now + 1;
+            if (use_dummy_ddr) begin
+                if (m_axi_arvalid && m_axi_arready) begin
+                    read_latency_start = cycle_now;
+                    read_first_beat = 1'b1;
+                end
+                else if (read_first_beat && m_axi_rvalid) begin
+                    read_first_beat = 1'b0;
+                    read_latency_seen = cycle_now - read_latency_start;
+                    read_latency_count = read_latency_count + 1;
+                    if (read_latency_seen != DUMMY_READ_LATENCY)
+                        read_latency_error = read_latency_error + 1;
+                end
+                if (m_axi_wvalid && m_axi_wready && m_axi_wlast)
+                    write_latency_start = cycle_now;
+                else if (m_axi_bvalid && m_axi_bready) begin
+                    write_latency_seen = cycle_now - write_latency_start;
+                    write_latency_count = write_latency_count + 1;
+                    if (write_latency_seen != DUMMY_WRITE_LATENCY)
+                        write_latency_error = write_latency_error + 1;
+                end
+            end
+        end
+    end
+
+    // ------------------------------------------------------------------------
     // DDR model : 128KB at 0x8000_0000, initial 32-bit word at address A is A
     // ------------------------------------------------------------------------
     reg [63:0] ddr [0:16383];
@@ -118,6 +238,7 @@ module RV32IM54F_8SP_data_cache_tb;
             for (i = 0; i < 16384; i = i + 1) begin
                 a = 32'h8000_0000 + i * 8;
                 ddr[i] = {a + 32'd4, a};
+                dummy_ddr_memory.memory[i] = {a + 32'd4, a};
             end
         end
     endtask
@@ -135,7 +256,7 @@ module RV32IM54F_8SP_data_cache_tb;
     function [31:0] ddr_word(input [31:0] a);
         reg [63:0] w;
         begin
-            w = ddr[a[16:3]];
+            w = use_dummy_ddr ? dummy_ddr_memory.memory[a[16:3]] : ddr[a[16:3]];
             ddr_word = a[2] ? w[63:32] : w[31:0];
         end
     endfunction
@@ -178,57 +299,57 @@ module RV32IM54F_8SP_data_cache_tb;
 
     always @(posedge clk or posedge reset) begin
         if (reset) begin
-            m_axi_arready <= 1'b0;
-            m_axi_rvalid <= 1'b0;
-            m_axi_rlast <= 1'b0;
-            m_axi_rresp <= 2'b00;
-            m_axi_rdata <= 64'h0;
+            model_arready <= 1'b0;
+            model_rvalid <= 1'b0;
+            model_rlast <= 1'b0;
+            model_rresp <= 2'b00;
+            model_rdata <= 64'h0;
             ar_busy <= 1'b0;
             r_beat <= 0;
             r_wait <= 0;
             ar_wait <= 0;
         end
         else begin
-            if (m_axi_arvalid && m_axi_arready) begin
-                m_axi_arready <= 1'b0;
+            if (model_arvalid && model_arready) begin
+                model_arready <= 1'b0;
                 ar_busy <= 1'b1;
                 r_addr <= m_axi_araddr;
                 r_len <= m_axi_arlen;
                 r_beat <= 0;
                 r_wait <= ($random & 7) + 2;
             end
-            else if (!ar_busy && m_axi_arvalid) begin
+            else if (!ar_busy && model_arvalid) begin
                 if (ar_wait == 0) begin
-                    m_axi_arready <= 1'b1;
+                    model_arready <= 1'b1;
                     ar_wait <= $random & 3;
                 end
                 else
                     ar_wait <= ar_wait - 1;
             end
             if (ar_busy) begin
-                if (m_axi_rvalid && m_axi_rready) begin
-                    if (m_axi_rlast) begin
-                        m_axi_rvalid <= 1'b0;
-                        m_axi_rlast <= 1'b0;
+                if (model_rvalid && m_axi_rready) begin
+                    if (model_rlast) begin
+                        model_rvalid <= 1'b0;
+                        model_rlast <= 1'b0;
                         ar_busy <= 1'b0;
                     end
                     else begin
                         r_beat <= r_beat + 1;
                         if (($random & 1) == 0) begin
-                            m_axi_rdata <= ddr[(r_addr[16:3] + r_beat + 1) & 14'h3FFF];
-                            m_axi_rlast <= (r_beat + 1 == r_len);
+                            model_rdata <= ddr[(r_addr[16:3] + r_beat + 1) & 14'h3FFF];
+                            model_rlast <= (r_beat + 1 == r_len);
                         end
                         else begin
-                            m_axi_rvalid <= 1'b0;
+                            model_rvalid <= 1'b0;
                             r_wait <= $random & 3;
                         end
                     end
                 end
-                else if (!m_axi_rvalid) begin
+                else if (!model_rvalid) begin
                     if (r_wait == 0) begin
-                        m_axi_rvalid <= 1'b1;
-                        m_axi_rdata <= ddr[(r_addr[16:3] + r_beat) & 14'h3FFF];
-                        m_axi_rlast <= (r_beat == r_len);
+                        model_rvalid <= 1'b1;
+                        model_rdata <= ddr[(r_addr[16:3] + r_beat) & 14'h3FFF];
+                        model_rlast <= (r_beat == r_len);
                     end
                     else
                         r_wait <= r_wait - 1;
@@ -248,10 +369,10 @@ module RV32IM54F_8SP_data_cache_tb;
 
     always @(posedge clk or posedge reset) begin
         if (reset) begin
-            m_axi_awready <= 1'b0;
-            m_axi_wready <= 1'b0;
-            m_axi_bvalid <= 1'b0;
-            m_axi_bresp <= 2'b00;
+            model_awready <= 1'b0;
+            model_wready <= 1'b0;
+            model_bvalid <= 1'b0;
+            model_bresp <= 2'b00;
             aw_busy <= 1'b0;
             b_pend <= 1'b0;
             w_beat <= 0;
@@ -260,30 +381,30 @@ module RV32IM54F_8SP_data_cache_tb;
             write_outstanding <= 1'b0;
         end
         else begin
-            if (m_axi_awvalid && m_axi_awready) begin
-                m_axi_awready <= 1'b0;
+            if (model_awvalid && model_awready) begin
+                model_awready <= 1'b0;
                 aw_busy <= 1'b1;
                 w_addr <= m_axi_awaddr;
                 w_len <= m_axi_awlen;
                 w_beat <= 0;
                 write_outstanding <= 1'b1;
             end
-            else if (!aw_busy && !b_pend && m_axi_awvalid) begin
+            else if (!aw_busy && !b_pend && model_awvalid) begin
                 if (aw_wait == 0) begin
-                    m_axi_awready <= 1'b1;
+                    model_awready <= 1'b1;
                     aw_wait <= $random & 3;
                 end
                 else
                     aw_wait <= aw_wait - 1;
             end
-            if (m_axi_wvalid && m_axi_wready) begin
+            if (m_axi_wvalid && model_wready) begin
                 ddr[(w_addr[16:3] + w_beat) & 14'h3FFF] <= merge8(ddr[(w_addr[16:3] + w_beat) & 14'h3FFF], m_axi_wdata, m_axi_wstrb);
                 if (m_axi_wlast != (w_beat == w_len)) begin
                     $display("[FAIL-AXI] WLAST mismatch at beat %0d (len %0d)", w_beat, w_len);
                     fail_count = fail_count + 1;
                 end
                 w_beat <= w_beat + 1;
-                m_axi_wready <= 1'b0;
+                model_wready <= 1'b0;
                 if (m_axi_wlast) begin
                     aw_busy <= 1'b0;
                     b_pend <= 1'b1;
@@ -291,15 +412,15 @@ module RV32IM54F_8SP_data_cache_tb;
                 end
             end
             else
-                m_axi_wready <= aw_busy && (($random & 3) != 0);
-            if (m_axi_bvalid && m_axi_bready) begin
-                m_axi_bvalid <= 1'b0;
+                model_wready <= aw_busy && (($random & 3) != 0);
+            if (model_bvalid && m_axi_bready) begin
+                model_bvalid <= 1'b0;
                 b_pend <= 1'b0;
                 write_outstanding <= 1'b0;
             end
-            else if (b_pend && !m_axi_bvalid) begin
+            else if (b_pend && !model_bvalid) begin
                 if (b_wait == 0)
-                    m_axi_bvalid <= 1'b1;
+                    model_bvalid <= 1'b1;
                 else
                     b_wait <= b_wait - 1;
             end
@@ -575,6 +696,41 @@ module RV32IM54F_8SP_data_cache_tb;
     endtask
 
 
+    task load_burst;
+        begin
+            clear_imem;
+            rv32im54f_8sp.instruction_memory.data[0] = 32'h10010fb7; // 0000: lui t6, 0x10010
+            rv32im54f_8sp.instruction_memory.data[1] = 32'h80003537; // 0004: lui a0, 0x80003
+            rv32im54f_8sp.instruction_memory.data[2] = 32'h01c52603; // 0008: lw a2, 0x1c(a0)
+            rv32im54f_8sp.instruction_memory.data[3] = 32'h00852683; // 000c: lw a3, 0x8(a0)
+            rv32im54f_8sp.instruction_memory.data[4] = 32'h01452703; // 0010: lw a4, 0x14(a0)
+            rv32im54f_8sp.instruction_memory.data[5] = 32'h00052783; // 0014: lw a5, 0x0(a0)
+            rv32im54f_8sp.instruction_memory.data[6] = 32'h800035b7; // 0018: lui a1, 0x80003
+            rv32im54f_8sp.instruction_memory.data[7] = 32'h40058593; // 001c: addi a1, a1, 0x400
+            rv32im54f_8sp.instruction_memory.data[8] = 32'h01100293; // 0020: addi t0, zero, 0x11
+            rv32im54f_8sp.instruction_memory.data[9] = 32'h0055a023; // 0024: sw t0, 0x0(a1)
+            rv32im54f_8sp.instruction_memory.data[10] = 32'h02200293; // 0028: addi t0, zero, 0x22
+            rv32im54f_8sp.instruction_memory.data[11] = 32'h0055a623; // 002c: sw t0, 0xc(a1)
+            rv32im54f_8sp.instruction_memory.data[12] = 32'h03300293; // 0030: addi t0, zero, 0x33
+            rv32im54f_8sp.instruction_memory.data[13] = 32'h0055a823; // 0034: sw t0, 0x10(a1)
+            rv32im54f_8sp.instruction_memory.data[14] = 32'h04400293; // 0038: addi t0, zero, 0x44
+            rv32im54f_8sp.instruction_memory.data[15] = 32'h0055ae23; // 003c: sw t0, 0x1c(a1)
+            rv32im54f_8sp.instruction_memory.data[16] = 32'h80007337; // 0040: lui t1, 0x80007
+            rv32im54f_8sp.instruction_memory.data[17] = 32'h40030313; // 0044: addi t1, t1, 0x400
+            rv32im54f_8sp.instruction_memory.data[18] = 32'h00032383; // 0048: lw t2, 0x0(t1)
+            rv32im54f_8sp.instruction_memory.data[19] = 32'h8000b337; // 004c: lui t1, 0x8000b
+            rv32im54f_8sp.instruction_memory.data[20] = 32'h40030313; // 0050: addi t1, t1, 0x400
+            rv32im54f_8sp.instruction_memory.data[21] = 32'h00032383; // 0054: lw t2, 0x0(t1)
+            rv32im54f_8sp.instruction_memory.data[22] = 32'h0005aa03; // 0058: lw s4, 0x0(a1)
+            rv32im54f_8sp.instruction_memory.data[23] = 32'h00c5aa83; // 005c: lw s5, 0xc(a1)
+            rv32im54f_8sp.instruction_memory.data[24] = 32'h0105ab03; // 0060: lw s6, 0x10(a1)
+            rv32im54f_8sp.instruction_memory.data[25] = 32'h01c5ab83; // 0064: lw s7, 0x1c(a1)
+            rv32im54f_8sp.instruction_memory.data[26] = 32'h0045ac03; // 0068: lw s8, 0x4(a1)
+            rv32im54f_8sp.instruction_memory.data[27] = 32'h000fa023; // 006c: sw zero, 0x0(t6)
+            rv32im54f_8sp.instruction_memory.data[28] = 32'h0000006f; // 0070: jal zero, 0x70 <_start+0x70>
+        end
+    endtask
+
     // ------------------------------------------------------------------------
     // Test sequence
     // ------------------------------------------------------------------------
@@ -588,6 +744,13 @@ module RV32IM54F_8SP_data_cache_tb;
         fail_count = 0;
         ar_count = 0;
         aw_count = 0;
+        use_dummy_ddr = 1'b0;
+        read_latency_error = 0;
+        write_latency_error = 0;
+        read_latency_count = 0;
+        write_latency_count = 0;
+        read_latency_seen = 0;
+        write_latency_seen = 0;
         reset = 1'b1;
 
         // Instruction_Memory loads its firmware image at time 0; overwrite after
@@ -597,8 +760,13 @@ module RV32IM54F_8SP_data_cache_tb;
         $display(" RV32IM54F_8SP + Data Cache Integration Testbench");
         $display("============================================");
 
-        for (round = 0; round < 2; round = round + 1) begin
-            $display("[TB] ---- round %0d (random AXI latency) ----", round);
+        for (round = 0; round < 3; round = round + 1) begin
+            use_dummy_ddr = (round == 2);
+            if (use_dummy_ddr)
+                $display("[TB] ---- round %0d (DummyDDRMemory, read %0d / write %0d cycles) ----",
+                    round, DUMMY_READ_LATENCY, DUMMY_WRITE_LATENCY);
+            else
+                $display("[TB] ---- round %0d (TB AXI model, random latency) ----", round);
             init_ddr;
 
             $display("[TB] 1. sw/lw to DDR, refill neighbor, load-use");
@@ -660,7 +828,32 @@ module RV32IM54F_8SP_data_cache_tb;
             run_program("edge");
             check_value("edge", "D$ accesses", 0, rv32im54f_8sp.data_cache_perf_access);
             check_value("edge", "AXI transactions", 0, (ar_count - ar0) + (aw_count - aw0));
+
+            $display("[TB] 9. every beat of a refill / write-back burst lands on the right word");
+            load_burst;
+            run_program("burst");
+            check_reg("burst", 12, 32'h8000_301C);
+            check_reg("burst", 13, 32'h8000_3008);
+            check_reg("burst", 14, 32'h8000_3014);
+            check_reg("burst", 15, 32'h8000_3000);
+            check_reg("burst", 20, 32'h11);
+            check_reg("burst", 21, 32'h22);
+            check_reg("burst", 22, 32'h33);
+            check_reg("burst", 23, 32'h44);
+            check_reg("burst", 24, 32'h8000_3404);
+            check_ddr("burst", 32'h8000_3400, 32'h11);
+            check_ddr("burst", 32'h8000_340C, 32'h22);
+            check_ddr("burst", 32'h8000_3410, 32'h33);
+            check_ddr("burst", 32'h8000_341C, 32'h44);
         end
+
+        $display("[TB] 10. DummyDDRMemory latency (measured on every burst of round 2)");
+        check_value("dummy", "read bursts seen", 1, read_latency_count > 0);
+        check_value("dummy", "write bursts seen", 1, write_latency_count > 0);
+        check_value("dummy", "read latency errors", 0, read_latency_error);
+        check_value("dummy", "write latency errors", 0, write_latency_error);
+        $display("[TB] DummyDDRMemory: %0d read bursts (last %0d cycles), %0d write bursts (last %0d cycles)",
+            read_latency_count, read_latency_seen, write_latency_count, write_latency_seen);
 
         $display("[TB] AXI transactions: AR %0d, AW %0d", ar_count, aw_count);
         $display("============================================");
