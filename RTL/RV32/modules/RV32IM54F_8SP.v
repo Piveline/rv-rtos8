@@ -12,6 +12,7 @@
 `include "./modules/CSR_File.v"
 `include "./modules/Control_Unit.v"
 `include "./modules/Data_Memory.v"
+`include "./modules/Data_Cache.v"
 `include "./modules/Exception_Detector.v"
 `include "./modules/Forward_Unit.v"
 `include "./modules/Hazard_Unit.v"
@@ -41,12 +42,41 @@ module RV32IM54F8SP #(
     input timer_interrupt_pending,
     input [XLEN-1:0] MMIO_read_data,
 
+    // Data Cache AXI4 master (to SmartConnect S01 -> MIG -> DDR3)
+    input wire data_cache_m_axi_awready,
+    input wire data_cache_m_axi_wready,
+    input wire [1:0] data_cache_m_axi_bresp,
+    input wire data_cache_m_axi_bvalid,
+    input wire data_cache_m_axi_arready,
+    input wire [63:0] data_cache_m_axi_rdata,
+    input wire [1:0] data_cache_m_axi_rresp,
+    input wire data_cache_m_axi_rlast,
+    input wire data_cache_m_axi_rvalid,
+
      // IO Interface
     
     output wire [31:0] retire_instruction,
     output wire [XLEN-1:0] MMIO_data_memory_write_data,
     output wire [XLEN-1:0] MMIO_data_memory_address,
-    output wire MMIO_data_memory_write_enable
+    output wire MMIO_data_memory_write_enable,
+
+    // Data Cache AXI4 master
+    output wire [31:0] data_cache_m_axi_awaddr,
+    output wire [7:0] data_cache_m_axi_awlen,
+    output wire [2:0] data_cache_m_axi_awsize,
+    output wire [1:0] data_cache_m_axi_awburst,
+    output wire data_cache_m_axi_awvalid,
+    output wire [63:0] data_cache_m_axi_wdata,
+    output wire [7:0] data_cache_m_axi_wstrb,
+    output wire data_cache_m_axi_wlast,
+    output wire data_cache_m_axi_wvalid,
+    output wire data_cache_m_axi_bready,
+    output wire [31:0] data_cache_m_axi_araddr,
+    output wire [7:0] data_cache_m_axi_arlen,
+    output wire [2:0] data_cache_m_axi_arsize,
+    output wire [1:0] data_cache_m_axi_arburst,
+    output wire data_cache_m_axi_arvalid,
+    output wire data_cache_m_axi_rready
 );
 
     // Program Counter and PC Plus 4
@@ -462,6 +492,21 @@ module RV32IM54F8SP #(
     assign MMIO_data_memory_write_enable = MEM_memory_write;
     assign MMIO_data_memory_address = MEM_alu_result;
 
+    // DDR region (0x8000_0000 ~ 0x9FFF_FFFF) is served by the data cache
+    wire mem_ddr_region = (MEM_alu_result[31:29] == 3'b100);
+    wire data_memory_write_done;
+
+    localparam DATA_CACHE_IDLE = 2'd0; // no request in flight
+    localparam DATA_CACHE_WAIT = 2'd1; // request sent, waiting for cpu_ready
+    localparam DATA_CACHE_HOLD = 2'd2; // answered, MEM still stalled by something else (cpu_rdata is kept by the cache)
+    localparam DATA_CACHE_DRAIN = 2'd3; // MEM instruction was flushed, drop the answer
+
+    reg [1:0] data_cache_state;
+
+    wire data_cache_cpu_req_valid;
+    wire [31:0] data_cache_cpu_rdata;
+    wire data_cache_cpu_ready;
+
     // MMIO Interface logics
     reg mmio_hit_reg;
     always @(posedge clk or posedge reset) begin
@@ -475,7 +520,8 @@ module RV32IM54F8SP #(
         end
 
     wire [XLEN-1:0] data_memory_read_data_muxed;
-    assign data_memory_read_data_muxed = mmio_hit_reg ? MMIO_read_data : data_memory_read_data;
+    assign data_memory_read_data_muxed = mem_ddr_region ? data_cache_cpu_rdata :
+        mmio_hit_reg ? MMIO_read_data : data_memory_read_data;
 
     // =========================================================================
     // EXR stage combinational logic: ALU source selection + forwarding
@@ -749,14 +795,125 @@ module RV32IM54F8SP #(
         .clk(clk),
         .clk_enable(clk_enable),
         .read_stall(EX_MEM_stall),
-        .write_enable(MEM_memory_write && !mmio_hit_reg),
+        .write_enable(MEM_memory_write && !mmio_hit_reg && !mem_ddr_region),
         .address(data_memory_address),
         .write_data(data_memory_write_data),
         .write_mask(write_mask),
         .rom_read_data(rom_read_data),
 
-        .write_done(write_done),
+        .write_done(data_memory_write_done),
         .read_data(data_memory_read_data)
+    );
+
+    // =========================================================================
+    // Data Cache (DDR region 0x8000_0000 ~ 0x9FFF_FFFF)
+    // A load/store in MEM whose address is in the DDR region goes to the data
+    // cache instead of DataMemory. The request is sent once, and the whole
+    // pipeline is stalled through write_done until the cache answers.
+    // =========================================================================
+    wire data_cache_fence_i_done;
+    wire data_cache_inval_done;
+    wire [31:0] data_cache_perf_access;
+    wire [31:0] data_cache_perf_miss;
+    wire [31:0] data_cache_perf_wb;
+    wire [31:0] data_cache_perf_stall;
+
+    // misaligned accesses trap in MEM and must not reach the cache
+    wire mem_misaligned = (MEM_funct3[1:0] == 2'b10) ? (MEM_alu_result[1:0] != 2'b00) :
+        (MEM_funct3[1:0] == 2'b01) ? MEM_alu_result[0] : 1'b0;
+    wire data_cache_access = (MEM_memory_read || MEM_memory_write) && mem_ddr_region && !mem_misaligned;
+
+    // send once, only for an instruction that is not being flushed
+    assign data_cache_cpu_req_valid = (data_cache_state == DATA_CACHE_IDLE) && data_cache_access && !MEM_WB_flush;
+
+    wire data_cache_busy = data_cache_cpu_req_valid ||
+        ((data_cache_state == DATA_CACHE_WAIT) && !data_cache_cpu_ready) ||
+        ((data_cache_state == DATA_CACHE_DRAIN) && data_cache_access);
+
+    // stall the pipeline while DataMemory or the data cache is busy
+    assign write_done = data_memory_write_done && !data_cache_busy;
+
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            data_cache_state <= DATA_CACHE_IDLE;
+        end
+        else if (clk_enable) begin
+            case (data_cache_state)
+                DATA_CACHE_IDLE: begin
+                    if (data_cache_cpu_req_valid)
+                        data_cache_state <= DATA_CACHE_WAIT;
+                end
+                DATA_CACHE_WAIT: begin
+                    if (data_cache_cpu_ready) begin
+                        // answer is used this cycle; wait in HOLD if MEM cannot move yet
+                        if (!EX_MEM_stall || EX_MEM_flush || MEM_WB_flush)
+                            data_cache_state <= DATA_CACHE_IDLE;
+                        else
+                            data_cache_state <= DATA_CACHE_HOLD;
+                    end
+                    else if (!EX_MEM_stall || EX_MEM_flush || MEM_WB_flush) begin
+                        // MEM instruction left before the answer (trap flush or standby)
+                        data_cache_state <= DATA_CACHE_DRAIN;
+                    end
+                end
+                DATA_CACHE_HOLD: begin
+                    if (!EX_MEM_stall || EX_MEM_flush || MEM_WB_flush)
+                        data_cache_state <= DATA_CACHE_IDLE;
+                end
+                DATA_CACHE_DRAIN: begin
+                    if (data_cache_cpu_ready)
+                        data_cache_state <= DATA_CACHE_IDLE;
+                end
+                default: data_cache_state <= DATA_CACHE_IDLE;
+            endcase
+        end
+    end
+
+    DataCache data_cache (
+        .clk(clk),
+        .reset(reset),
+        .clk_enable(clk_enable),
+        .cpu_req_valid(data_cache_cpu_req_valid),
+        .cpu_req_we(MEM_memory_write),
+        .cpu_req_addr(MEM_alu_result),
+        .cpu_req_wdata(data_memory_write_data),
+        .cpu_req_wstrb(write_mask),
+        .fence_i_req(1'b0),
+        .inval_req(1'b0),
+        .perf_clear(1'b0),
+        .m_axi_awready(data_cache_m_axi_awready),
+        .m_axi_wready(data_cache_m_axi_wready),
+        .m_axi_bresp(data_cache_m_axi_bresp),
+        .m_axi_bvalid(data_cache_m_axi_bvalid),
+        .m_axi_arready(data_cache_m_axi_arready),
+        .m_axi_rdata(data_cache_m_axi_rdata),
+        .m_axi_rresp(data_cache_m_axi_rresp),
+        .m_axi_rlast(data_cache_m_axi_rlast),
+        .m_axi_rvalid(data_cache_m_axi_rvalid),
+        .cpu_rdata(data_cache_cpu_rdata),
+        .cpu_ready(data_cache_cpu_ready),
+        .fence_i_done(data_cache_fence_i_done),
+        .inval_done(data_cache_inval_done),
+        .perf_access(data_cache_perf_access),
+        .perf_miss(data_cache_perf_miss),
+        .perf_wb(data_cache_perf_wb),
+        .perf_stall(data_cache_perf_stall),
+        .m_axi_awaddr(data_cache_m_axi_awaddr),
+        .m_axi_awlen(data_cache_m_axi_awlen),
+        .m_axi_awsize(data_cache_m_axi_awsize),
+        .m_axi_awburst(data_cache_m_axi_awburst),
+        .m_axi_awvalid(data_cache_m_axi_awvalid),
+        .m_axi_wdata(data_cache_m_axi_wdata),
+        .m_axi_wstrb(data_cache_m_axi_wstrb),
+        .m_axi_wlast(data_cache_m_axi_wlast),
+        .m_axi_wvalid(data_cache_m_axi_wvalid),
+        .m_axi_bready(data_cache_m_axi_bready),
+        .m_axi_araddr(data_cache_m_axi_araddr),
+        .m_axi_arlen(data_cache_m_axi_arlen),
+        .m_axi_arsize(data_cache_m_axi_arsize),
+        .m_axi_arburst(data_cache_m_axi_arburst),
+        .m_axi_arvalid(data_cache_m_axi_arvalid),
+        .m_axi_rready(data_cache_m_axi_rready)
     );
 
     ExceptionDetector exception_detector (
