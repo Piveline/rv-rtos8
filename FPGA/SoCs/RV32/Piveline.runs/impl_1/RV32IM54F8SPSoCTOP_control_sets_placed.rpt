@@ -1,0 +1,164 @@
+Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+---------------------------------------------------------------------------------------------------------------------------------------------
+| Tool Version : Vivado v.2025.2 (win64) Build 6299465 Fri Nov 14 19:35:11 GMT 2025
+| Date         : Fri Nov 20 01:34:51 2026
+| Host         : DESKTOP-7K1O4NB running 64-bit major release  (build 9200)
+| Command      : report_control_sets -verbose -file RV32IM54F8SPSoCTOP_control_sets_placed.rpt
+| Design       : RV32IM54F8SPSoCTOP
+| Device       : xc7a200t
+---------------------------------------------------------------------------------------------------------------------------------------------
+
+Control Set Information
+
+Table of Contents
+-----------------
+1. Summary
+2. Histogram
+3. Flip-Flop Distribution
+4. Detailed Control Set Information
+
+1. Summary
+----------
+
++----------------------------------------------------------+-------+
+|                          Status                          | Count |
++----------------------------------------------------------+-------+
+| Total control sets                                       |    86 |
+|    Minimum number of control sets                        |    36 |
+|    Addition due to synthesis replication                 |     0 |
+|    Addition due to physical synthesis replication        |    50 |
+| Unused register locations in slices containing registers |   284 |
++----------------------------------------------------------+-------+
+* Control sets can be merged at opt_design using control_set_merge or merge_equivalent_drivers
+** Run report_qor_suggestions for automated merging and remapping suggestions
+
+
+2. Histogram
+------------
+
++--------------------+-------+
+|       Fanout       | Count |
++--------------------+-------+
+| Total control sets |    86 |
+| >= 0 to < 4        |     7 |
+| >= 4 to < 6        |     9 |
+| >= 6 to < 8        |     4 |
+| >= 8 to < 10       |     5 |
+| >= 10 to < 12      |     5 |
+| >= 12 to < 14      |    11 |
+| >= 14 to < 16      |     5 |
+| >= 16              |    40 |
++--------------------+-------+
+* Control sets can be remapped at either synth_design or opt_design
+
+
+3. Flip-Flop Distribution
+-------------------------
+
++--------------+-----------------------+------------------------+-----------------+--------------+
+| Clock Enable | Synchronous Set/Reset | Asynchronous Set/Reset | Total Registers | Total Slices |
++--------------+-----------------------+------------------------+-----------------+--------------+
+| No           | No                    | No                     |             107 |           40 |
+| No           | No                    | Yes                    |              73 |           36 |
+| No           | Yes                   | No                     |              60 |           24 |
+| Yes          | No                    | No                     |              44 |           17 |
+| Yes          | No                    | Yes                    |            1052 |          390 |
+| Yes          | Yes                   | No                     |            1532 |          442 |
++--------------+-----------------------+------------------------+-----------------+--------------+
+
+
+4. Detailed Control Set Information
+-----------------------------------
+
++-------------------------+-----------------------------------------------------------------+-----------------------------------------------------------------------+------------------+----------------+--------------+
+|       Clock Signal      |                          Enable Signal                          |                            Set/Reset Signal                           | Slice Load Count | Bel Load Count | Bels / Slice |
++-------------------------+-----------------------------------------------------------------+-----------------------------------------------------------------------+------------------+----------------+--------------+
+|  pll_inst/inst/clk_out3 | uart_tx_inst/tx_i_1_n_0                                         | sys_reset_repN_5                                                      |                1 |              1 |         1.00 |
+|  pll_inst/inst/clk_out3 | cpu/alu/divider_word/FSM_onehot_state[3]_i_1_n_0                | sys_reset_repN_5                                                      |                1 |              1 |         1.00 |
+|  pll_inst/inst/clk_out3 | cpu/alu/multiplier_word/cpu_clk_enable_reg                      | sys_reset_repN_6                                                      |                1 |              1 |         1.00 |
+|  pll_inst/inst/clk_out3 |                                                                 | sys_reset_repN_5                                                      |                2 |              2 |         1.00 |
+|  pll_inst/inst/clk_out3 | cpu/exr_ex_register/E[0]                                        | sys_reset_repN_6                                                      |                1 |              2 |         2.00 |
+|  pll_inst/inst/clk_out1 |                                                                 | rst_pix_sync[2]_i_1_n_0                                               |                2 |              3 |         1.50 |
+|  pll_inst/inst/clk_out3 | cpu/alu/divider_word/FSM_onehot_state[3]_i_1_n_0                | sys_reset_repN_4                                                      |                1 |              3 |         3.00 |
+|  pll_inst/inst/clk_out1 | cdc_fifo/wr_ptr_bin[3]_i_1_n_0                                  | pix_reset                                                             |                1 |              4 |         4.00 |
+|  pll_inst/inst/clk_out3 | cpu/alu/multiplier_word/FSM_onehot_stage[3]_i_1_n_0             | sys_reset_repN_6                                                      |                1 |              4 |         4.00 |
+|  pll_inst/inst/clk_out3 | cpu/alu/divider_word/quotient_sign4_out                         | sys_reset_repN_6                                                      |                2 |              4 |         2.00 |
+|  pll_inst/inst/clk_out3 | cpu/ex_mem_register/MEM_memory_write_reg_0[0]                   | sys_reset_repN_3                                                      |                1 |              4 |         4.00 |
+|  pll_inst/inst/clk_out3 | uart_tx_inst/bit_counter[3]_i_1__0_n_0                          | sys_reset_repN_5                                                      |                1 |              4 |         4.00 |
+|  pll_inst/inst/clk_out3 | cpu/exception_detector/FSM_onehot_trap_handle_state_reg[0]_0[0] | sys_reset_repN                                                        |                1 |              4 |         4.00 |
+|  pll_inst/inst/clk_out3 | cpu/exception_detector/cpu_clk_enable_reg_2[0]                  | sys_reset                                                             |                3 |              5 |         1.67 |
+|  pll_inst/inst/clk_out3 |                                                                 | sys_reset_repN_6                                                      |                3 |              5 |         1.67 |
+|  pll_inst/inst/clk_out3 |                                                                 | sys_reset_repN                                                        |                2 |              5 |         2.50 |
+|  pll_inst/inst/clk_out3 | cpu/exception_detector/cpu_clk_enable_reg_1[0]                  | sys_reset_repN_1                                                      |                3 |              6 |         2.00 |
+|  pll_inst/inst/clk_out3 | cpu/exception_detector/cpu_clk_enable_reg_6[0]                  | sys_reset_repN_5                                                      |                3 |              6 |         2.00 |
+|  pll_inst/inst/clk_out3 |                                                                 |                                                                       |                6 |              7 |         1.17 |
+|  pll_inst/inst/clk_out3 |                                                                 | sys_reset_repN_1                                                      |                5 |              7 |         1.40 |
+|  pll_inst/inst/clk_out3 | cpu/ex_mem_register/MEM_alu_result_reg[2]_0[0]                  | sys_reset_repN_5                                                      |                4 |              8 |         2.00 |
+|  pll_inst/inst/clk_out1 | ps2/valid1_out                                                  | pix_reset                                                             |                2 |              8 |         4.00 |
+|  pll_inst/inst/clk_out3 | cpu/exception_detector/cpu_clk_enable_reg_1[0]                  | sys_reset                                                             |                6 |              8 |         1.33 |
+|  pll_inst/inst/clk_out3 | cpu/exception_detector/cpu_clk_enable_reg_2[0]                  | sys_reset_repN_1                                                      |                3 |              9 |         3.00 |
+|  pll_inst/inst/clk_out3 | uart_tx_inst/shift_reg[8]_i_1_n_0                               | sys_reset_repN_5                                                      |                4 |              9 |         2.25 |
+|  pll_inst/inst/clk_out1 | vga/vcnt[0]                                                     | pix_reset                                                             |                4 |             10 |         2.50 |
+|  pll_inst/inst/clk_out1 | v_cnt[0]                                                        | pix_reset                                                             |                5 |             10 |         2.00 |
+|  pll_inst/inst/clk_out3 |                                                                 | rst_pix_sync[2]_i_1_n_0                                               |                7 |             10 |         1.43 |
+|  pll_inst/inst/clk_out3 | mmio/uart_tx_start_reg_0[0]                                     | sys_reset_repN_5                                                      |                5 |             10 |         2.00 |
+|  pll_inst/inst/clk_out1 |                                                                 | hdmi_encoder/U0/DataEncoders[0].DataEncoder/pDataOutRaw[9]_i_1__1_n_0 |                3 |             10 |         3.33 |
+|  pll_inst/inst/clk_out3 |                                                                 | sys_reset_repN_2                                                      |                5 |             12 |         2.40 |
+|  pll_inst/inst/clk_out1 | cdc_fifo/wr_ptr_bin[3]_i_1_n_0                                  |                                                                       |                2 |             12 |         6.00 |
+|  pll_inst/inst/clk_out3 | LED_OBUF[0]                                                     |                                                                       |                5 |             12 |         2.40 |
+|  pll_inst/inst/clk_out1 | ps2/ps2_negedge                                                 | pix_reset                                                             |                4 |             13 |         3.25 |
+|  pll_inst/inst/clk_out3 | cpu/trap_controller/cpu_clk_enable_reg_0[0]                     | sys_reset                                                             |                8 |             13 |         1.62 |
+|  pll_inst/inst/clk_out3 | cpu/exception_detector/instruction_pc0                          | sys_reset                                                             |                3 |             13 |         4.33 |
+|  pll_inst/inst/clk_out3 | cpu/trap_controller/E[0]                                        | sys_reset                                                             |                3 |             13 |         4.33 |
+|  pll_inst/inst/clk_out3 | cpu/exception_detector/cpu_clk_enable_reg_6[0]                  | sys_reset_repN_6                                                      |                7 |             13 |         1.86 |
+|  pll_inst/inst/clk_out3 | cpu/exception_detector/cpu_clk_enable_reg_6[0]                  | sys_reset_repN_1                                                      |                5 |             13 |         2.60 |
+|  pll_inst/inst/clk_out3 | cpu/alu/multiplier_word/result_sign_s11_out                     | sys_reset_repN_6                                                      |                5 |             13 |         2.60 |
+|  pll_inst/inst/clk_out3 | LED_OBUF[0]                                                     | cpu/trap_controller/cpu_clk_enable_reg_2                              |                6 |             13 |         2.17 |
+|  pll_inst/inst/clk_out3 | cpu/trap_controller/WB_raw_imm_reg[0][0]                        | sys_reset                                                             |                3 |             14 |         4.67 |
+|  pll_inst/inst/clk_out3 | cpu/trap_controller/WB_raw_imm_reg[1][0]                        | sys_reset                                                             |                4 |             14 |         3.50 |
+|  pll_inst/inst/clk_out3 | cpu/trap_controller/WB_raw_imm_reg[2][0]                        | sys_reset                                                             |                5 |             14 |         2.80 |
+|  pll_inst/inst/clk_out3 | cpu/trap_controller/WB_raw_imm_reg[0]_0[0]                      | sys_reset                                                             |                5 |             14 |         2.80 |
+|  pll_inst/inst/clk_out3 |                                                                 | sys_reset_repN_3                                                      |                5 |             15 |         3.00 |
+|  pll_inst/inst/clk_out3 | cpu/trap_controller/WB_raw_imm_reg[0][0]                        | sys_reset_repN                                                        |                6 |             18 |         3.00 |
+|  pll_inst/inst/clk_out3 | cpu/trap_controller/WB_raw_imm_reg[0]_0[0]                      | sys_reset_repN                                                        |                6 |             18 |         3.00 |
+|  pll_inst/inst/clk_out3 | cpu/trap_controller/WB_raw_imm_reg[1][0]                        | sys_reset_repN                                                        |                7 |             18 |         2.57 |
+|  pll_inst/inst/clk_out3 | cpu/trap_controller/WB_raw_imm_reg[2][0]                        | sys_reset_repN                                                        |                3 |             18 |         6.00 |
+|  pll_inst/inst/clk_out3 | cpu/exception_detector/cpu_clk_enable_reg_2[0]                  | sys_reset_repN_6                                                      |               13 |             18 |         1.38 |
+|  pll_inst/inst/clk_out3 | cpu/exception_detector/cpu_clk_enable_reg_1[0]                  | sys_reset_repN_6                                                      |                8 |             18 |         2.25 |
+|  pll_inst/inst/clk_out3 | LED_OBUF[0]                                                     | sys_reset_repN_6                                                      |                9 |             18 |         2.00 |
+|  pll_inst/inst/clk_out3 | cpu/trap_controller/cpu_clk_enable_reg_0[0]                     | sys_reset_repN                                                        |               13 |             19 |         1.46 |
+|  pll_inst/inst/clk_out3 | cpu/trap_controller/E[0]                                        | sys_reset_repN                                                        |                6 |             19 |         3.17 |
+|  pll_inst/inst/clk_out3 | cpu/exception_detector/instruction_pc0                          | sys_reset_repN                                                        |                6 |             19 |         3.17 |
+|  pll_inst/inst/clk_out1 | inhibit_timer[22]_i_1_n_0                                       | pix_reset                                                             |                7 |             23 |         3.29 |
+|  pll_inst/inst/clk_out3 | LED_OBUF[0]                                                     | sys_reset_repN_1                                                      |               11 |             24 |         2.18 |
+|  pll_inst/inst/clk_out3 | cpu/alu/divider_word/quotient_sign4_out                         | sys_reset_repN_4                                                      |               12 |             30 |         2.50 |
+|  pll_inst/inst/clk_out3 | cpu/alu/multiplier_word/prod_low[31]_i_1_n_0                    | sys_reset_repN_1                                                      |                8 |             30 |         3.75 |
+|  pll_inst/inst/clk_out1 |                                                                 | pix_reset                                                             |               12 |             32 |         2.67 |
+|  pll_inst/inst/clk_out1 |                                                                 | hdmi_encoder/U0/DataEncoders[0].DataEncoder/SR[0]                     |               14 |             32 |         2.29 |
+|  pll_inst/inst/clk_out3 | cpu/ex_mem_register/E[1]                                        | sys_reset_repN_5                                                      |               12 |             32 |         2.67 |
+|  pll_inst/inst/clk_out3 | cpu/ex_mem_register/E[0]                                        | sys_reset_repN_5                                                      |               12 |             32 |         2.67 |
+|  pll_inst/inst/clk_out3 | cpu/ex_mem_register/MEM_alu_result_reg[8]_0[0]                  | sys_reset_repN_5                                                      |               13 |             32 |         2.46 |
+|  pll_inst/inst/clk_out3 | cpu/ex_mem_register/MEM_alu_result_reg[8]_0[1]                  | sys_reset_repN_5                                                      |                9 |             32 |         3.56 |
+|  pll_inst/inst/clk_out3 | cpu/exr_ex_register/E[0]                                        | sys_reset_repN_4                                                      |               12 |             32 |         2.67 |
+|  pll_inst/inst/clk_out3 | cpu/trap_controller/est_target[0]                               | cpu/exception_detector/cpu_clk_enable_reg                             |                9 |             32 |         3.56 |
+|  pll_inst/inst/clk_out3 | cpu/exr_ex_register/cpu_clk_enable_reg[0]                       |                                                                       |               12 |             32 |         2.67 |
+|  pll_inst/inst/clk_out3 | cpu/exception_detector/cpu_clk_enable_reg_0                     | cpu/trap_controller/EX_MEM_flush                                      |               19 |             33 |         1.74 |
+|  pll_inst/inst/clk_out3 | cpu/alu/multiplier_word/prod_low[31]_i_1_n_0                    | sys_reset_repN_6                                                      |               10 |             34 |         3.40 |
+|  pll_inst/inst/clk_out3 | cpu/alu/multiplier_word/cpu_clk_enable_reg                      | sys_reset_repN_1                                                      |               10 |             36 |         3.60 |
+|  pll_inst/inst/clk_out3 | LED_OBUF[0]                                                     | sys_reset                                                             |               21 |             49 |         2.33 |
+|  pll_inst/inst/clk_out3 | cpu/alu/multiplier_word/result_sign_s11_out                     | sys_reset_repN_1                                                      |               16 |             52 |         3.25 |
+|  pll_inst/inst/clk_out3 | cpu/alu/divider_word/quotient_reg[31]_i_1_n_0                   | sys_reset_repN_4                                                      |               19 |             64 |         3.37 |
+|  pll_inst/inst/clk_out3 | cpu/csr_file/minstret[0]                                        | sys_reset_repN                                                        |               17 |             64 |         3.76 |
+|  pll_inst/inst/clk_out3 | cpu/alu/divider_word/bit_counter[5]_i_1_n_0                     | sys_reset_repN_4                                                      |               29 |             70 |         2.41 |
+|  pll_inst/inst/clk_out3 | cpu/mem_wb_register/p_0_in2_out                                 |                                                                       |               11 |             88 |         8.00 |
+|  pll_inst/inst/clk_out3 | LED_OBUF[0]                                                     | sys_reset_repN                                                        |               35 |             93 |         2.66 |
+|  pll_inst/inst/clk_out3 | cpu/trap_controller/FSM_onehot_trap_handle_state_reg[5]_2[0]    | cpu/if_io_register/IO_pc[31]_i_1_n_0                                  |               18 |             96 |         5.33 |
+|  pll_inst/inst/clk_out3 | cpu/exception_detector/E[0]                                     | cpu/trap_controller/SR[0]                                             |               27 |             98 |         3.63 |
+|  pll_inst/inst/clk_out1 |                                                                 |                                                                       |               34 |            100 |         2.94 |
+|  pll_inst/inst/clk_out3 | cpu/exception_detector/E[0]                                     | cpu/trap_controller/cpu_clk_enable_reg_2                              |               61 |            255 |         4.18 |
+|  pll_inst/inst/clk_out3 | cpu/exception_detector/cpu_clk_enable_reg_0                     | cpu/ex_ex2_register/EX2_pc[31]_i_1_n_0                                |               79 |            266 |         3.37 |
+|  pll_inst/inst/clk_out3 | cpu/exception_detector/cpu_clk_enable_reg_0                     | cpu/exception_detector/SR[0]                                          |               83 |            300 |         3.61 |
+|  pll_inst/inst/clk_out3 | cpu/exception_detector/cpu_clk_enable_reg_0                     | cpu/trap_controller/cpu_clk_enable_reg_3[0]                           |               94 |            311 |         3.31 |
++-------------------------+-----------------------------------------------------------------+-----------------------------------------------------------------------+------------------+----------------+--------------+
+
+

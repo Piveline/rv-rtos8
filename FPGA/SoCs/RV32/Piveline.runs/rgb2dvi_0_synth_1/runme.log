@@ -1,0 +1,294 @@
+
+*** Running vivado
+    with args -log rgb2dvi_0.vds -m64 -product Vivado -mode batch -messageDb vivado.pb -notrace -source rgb2dvi_0.tcl
+
+
+
+****** Vivado v2025.2 (64-bit)
+  **** SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
+  **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+  **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+  **** Start of session at: Fri Nov 20 01:21:28 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+ERROR: [Common 17-1257] Failed to create directory 'C'.
+source rgb2dvi_0.tcl -notrace
+create_project: Time (s): cpu = 00:00:17 ; elapsed = 00:00:13 . Memory (MB): peak = 530.742 ; gain = 220.891
+INFO: [IP_Flow 19-234] Refreshing IP repositories
+WARNING: [IP_Flow 19-2248] Failed to load user IP repository 'd:/sangmy/rv-rtos8/FPGA/vivado-library-master'; Can't find the specified path.
+If this directory should no longer be in your list of user repositories, go to the IP Settings dialog and remove it.
+INFO: [IP_Flow 19-2313] Loaded Vivado IP repository 'V:/Vivado_IDE/2025.2/Vivado/data/ip'.
+Command: synth_design -top rgb2dvi_0 -part xc7a200tsbg484-1 -incremental_mode off -mode out_of_context
+Starting synth_design
+INFO: [IP_Flow 19-2162] IP 'rgb2dvi_0' is locked:
+* IP definition 'rgb2dvi (1.4)' for IP 'rgb2dvi_0' (customized with software release 2025.2) was not found in the IP Catalog.
+Attempting to get a license for feature 'Synthesis' and/or device 'xc7a200t'
+INFO: [Common 17-349] Got license for feature 'Synthesis' and/or device 'xc7a200t'
+INFO: [Device 21-403] Loading part xc7a200tsbg484-1
+INFO: [Synth 8-7079] Multithreading enabled for synth_design using a maximum of 2 processes.
+INFO: [Synth 8-7078] Launching helper process for spawning children vivado processes
+INFO: [Synth 8-7075] Helper process launched with PID 28740
+---------------------------------------------------------------------------------
+Starting RTL Elaboration : Time (s): cpu = 00:00:06 ; elapsed = 00:00:08 . Memory (MB): peak = 1321.164 ; gain = 542.520
+---------------------------------------------------------------------------------
+INFO: [Synth 8-638] synthesizing module 'rgb2dvi_0' [d:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.gen/sources_1/ip/rgb2dvi_0/synth/rgb2dvi_0.vhd:72]
+	Parameter kGenerateSerialClk bound to: 0 - type: bool 
+	Parameter kClkPrimitive bound to: PLL - type: string 
+	Parameter kRstActiveHigh bound to: 1 - type: bool 
+	Parameter kClkRange bound to: 1 - type: integer 
+	Parameter kD0Swap bound to: 0 - type: bool 
+	Parameter kD1Swap bound to: 0 - type: bool 
+	Parameter kD2Swap bound to: 0 - type: bool 
+	Parameter kClkSwap bound to: 0 - type: bool 
+INFO: [Synth 8-3491] module 'rgb2dvi' declared at 'd:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.gen/sources_1/ip/rgb2dvi_0/src/rgb2dvi.vhd:62' bound to instance 'U0' of component 'rgb2dvi' [d:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.gen/sources_1/ip/rgb2dvi_0/synth/rgb2dvi_0.vhd:131]
+INFO: [Synth 8-638] synthesizing module 'rgb2dvi' [d:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.gen/sources_1/ip/rgb2dvi_0/src/rgb2dvi.vhd:94]
+INFO: [Synth 8-638] synthesizing module 'ResetBridge' [d:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.gen/sources_1/ip/rgb2dvi_0/xil_defaultlib/src/SyncAsyncReset.vhd:72]
+INFO: [Synth 8-638] synthesizing module 'SyncAsync' [d:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.gen/sources_1/ip/rgb2dvi_0/xil_defaultlib/src/SyncAsync.vhd:72]
+INFO: [Synth 8-256] done synthesizing module 'SyncAsync' (0#1) [d:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.gen/sources_1/ip/rgb2dvi_0/xil_defaultlib/src/SyncAsync.vhd:72]
+INFO: [Synth 8-256] done synthesizing module 'ResetBridge' (0#1) [d:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.gen/sources_1/ip/rgb2dvi_0/xil_defaultlib/src/SyncAsyncReset.vhd:72]
+INFO: [Synth 8-638] synthesizing module 'OutputSERDES' [d:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.gen/sources_1/ip/rgb2dvi_0/src/OutputSERDES.vhd:76]
+	Parameter IOSTANDARD bound to: TMDS_33 - type: string 
+INFO: [Synth 8-113] binding component instance 'OutputBuffer' to cell 'OBUFDS' [d:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.gen/sources_1/ip/rgb2dvi_0/src/OutputSERDES.vhd:83]
+	Parameter DATA_RATE_OQ bound to: DDR - type: string 
+	Parameter DATA_RATE_TQ bound to: SDR - type: string 
+	Parameter DATA_WIDTH bound to: 10 - type: integer 
+	Parameter SERDES_MODE bound to: MASTER - type: string 
+	Parameter TBYTE_CTL bound to: FALSE - type: string 
+	Parameter TBYTE_SRC bound to: FALSE - type: string 
+	Parameter TRISTATE_WIDTH bound to: 1 - type: integer 
+INFO: [Synth 8-113] binding component instance 'SerializerMaster' to cell 'OSERDESE2' [d:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.gen/sources_1/ip/rgb2dvi_0/src/OutputSERDES.vhd:92]
+	Parameter DATA_RATE_OQ bound to: DDR - type: string 
+	Parameter DATA_RATE_TQ bound to: SDR - type: string 
+	Parameter DATA_WIDTH bound to: 10 - type: integer 
+	Parameter SERDES_MODE bound to: SLAVE - type: string 
+	Parameter TBYTE_CTL bound to: FALSE - type: string 
+	Parameter TBYTE_SRC bound to: FALSE - type: string 
+	Parameter TRISTATE_WIDTH bound to: 1 - type: integer 
+INFO: [Synth 8-113] binding component instance 'SerializerSlave' to cell 'OSERDESE2' [d:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.gen/sources_1/ip/rgb2dvi_0/src/OutputSERDES.vhd:135]
+INFO: [Synth 8-256] done synthesizing module 'OutputSERDES' (0#1) [d:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.gen/sources_1/ip/rgb2dvi_0/src/OutputSERDES.vhd:76]
+INFO: [Synth 8-638] synthesizing module 'TMDS_Encoder' [d:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.gen/sources_1/ip/rgb2dvi_0/src/TMDS_Encoder.vhd:80]
+INFO: [Synth 8-256] done synthesizing module 'TMDS_Encoder' (0#1) [d:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.gen/sources_1/ip/rgb2dvi_0/src/TMDS_Encoder.vhd:80]
+INFO: [Synth 8-256] done synthesizing module 'rgb2dvi' (0#1) [d:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.gen/sources_1/ip/rgb2dvi_0/src/rgb2dvi.vhd:94]
+INFO: [Synth 8-256] done synthesizing module 'rgb2dvi_0' (0#1) [d:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.gen/sources_1/ip/rgb2dvi_0/synth/rgb2dvi_0.vhd:72]
+INFO: [Synth 8-7129] Port SerialClk in module TMDS_Encoder is either unconnected or has no load
+INFO: [Synth 8-7129] Port aRst in module TMDS_Encoder is either unconnected or has no load
+INFO: [Synth 8-7129] Port aRst_n in module rgb2dvi is either unconnected or has no load
+---------------------------------------------------------------------------------
+Finished RTL Elaboration : Time (s): cpu = 00:00:08 ; elapsed = 00:00:10 . Memory (MB): peak = 1441.754 ; gain = 663.109
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Handling Custom Attributes
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Handling Custom Attributes : Time (s): cpu = 00:00:08 ; elapsed = 00:00:10 . Memory (MB): peak = 1441.754 ; gain = 663.109
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished RTL Optimization Phase 1 : Time (s): cpu = 00:00:08 ; elapsed = 00:00:10 . Memory (MB): peak = 1441.754 ; gain = 663.109
+---------------------------------------------------------------------------------
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.005 . Memory (MB): peak = 1441.754 ; gain = 0.000
+INFO: [Netlist 29-17] Analyzing 4 Unisim elements for replacement
+INFO: [Netlist 29-28] Unisim Transformation completed in 0 CPU seconds
+INFO: [Project 1-570] Preparing netlist for logic optimization
+
+Processing XDC Constraints
+Initializing timing engine
+Parsing XDC File [d:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.gen/sources_1/ip/rgb2dvi_0/src/rgb2dvi_ooc.xdc] for cell 'U0'
+Finished Parsing XDC File [d:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.gen/sources_1/ip/rgb2dvi_0/src/rgb2dvi_ooc.xdc] for cell 'U0'
+Parsing XDC File [d:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.gen/sources_1/ip/rgb2dvi_0/src/rgb2dvi.xdc] for cell 'U0'
+Finished Parsing XDC File [d:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.gen/sources_1/ip/rgb2dvi_0/src/rgb2dvi.xdc] for cell 'U0'
+Parsing XDC File [D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.runs/rgb2dvi_0_synth_1/dont_touch.xdc]
+Finished Parsing XDC File [D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.runs/rgb2dvi_0_synth_1/dont_touch.xdc]
+Parsing XDC File [d:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.gen/sources_1/ip/rgb2dvi_0/src/rgb2dvi_clocks.xdc] for cell 'U0'
+Finished Parsing XDC File [d:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.gen/sources_1/ip/rgb2dvi_0/src/rgb2dvi_clocks.xdc] for cell 'U0'
+Completed Processing XDC Constraints
+
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 1524.398 ; gain = 0.000
+INFO: [Project 1-111] Unisim Transformation Summary:
+No Unisim elements were transformed.
+
+Constraint Validation Runtime : Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.068 . Memory (MB): peak = 1524.398 ; gain = 0.000
+INFO: [Designutils 20-5008] Incremental synthesis strategy off
+---------------------------------------------------------------------------------
+Finished Constraint Validation : Time (s): cpu = 00:00:20 ; elapsed = 00:00:23 . Memory (MB): peak = 1524.398 ; gain = 745.754
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Loading Part and Timing Information
+---------------------------------------------------------------------------------
+Loading part: xc7a200tsbg484-1
+---------------------------------------------------------------------------------
+Finished Loading Part and Timing Information : Time (s): cpu = 00:00:20 ; elapsed = 00:00:23 . Memory (MB): peak = 1524.398 ; gain = 745.754
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Applying 'set_property' XDC Constraints
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished applying 'set_property' XDC Constraints : Time (s): cpu = 00:00:21 ; elapsed = 00:00:23 . Memory (MB): peak = 1524.398 ; gain = 745.754
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished RTL Optimization Phase 2 : Time (s): cpu = 00:00:21 ; elapsed = 00:00:24 . Memory (MB): peak = 1524.398 ; gain = 745.754
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start RTL Component Statistics 
+---------------------------------------------------------------------------------
+Detailed RTL Component Info : 
++---Adders : 
+	   3 Input    5 Bit       Adders := 9     
+	   4 Input    5 Bit       Adders := 3     
+	   2 Input    5 Bit       Adders := 3     
+	   8 Input    4 Bit       Adders := 6     
+	   2 Input    4 Bit       Adders := 3     
++---XORs : 
+	   2 Input      1 Bit         XORs := 42    
++---Registers : 
+	               10 Bit    Registers := 3     
+	                9 Bit    Registers := 3     
+	                8 Bit    Registers := 3     
+	                5 Bit    Registers := 3     
+	                4 Bit    Registers := 9     
+	                2 Bit    Registers := 1     
+	                1 Bit    Registers := 18    
++---Muxes : 
+	   4 Input   10 Bit        Muxes := 3     
+	   2 Input    9 Bit        Muxes := 3     
+	   2 Input    5 Bit        Muxes := 9     
+---------------------------------------------------------------------------------
+Finished RTL Component Statistics 
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Part Resource Summary
+---------------------------------------------------------------------------------
+Part Resources:
+DSPs: 740 (col length:100)
+BRAMs: 730 (col length: RAMB18 100 RAMB36 50)
+---------------------------------------------------------------------------------
+Finished Part Resource Summary
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Cross Boundary and Area Optimization
+---------------------------------------------------------------------------------
+INFO: [Synth 8-7129] Port aRst_n in module rgb2dvi is either unconnected or has no load
+---------------------------------------------------------------------------------
+Finished Cross Boundary and Area Optimization : Time (s): cpu = 00:00:29 ; elapsed = 00:00:32 . Memory (MB): peak = 1524.398 ; gain = 745.754
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Applying XDC Timing Constraints
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Applying XDC Timing Constraints : Time (s): cpu = 00:00:38 ; elapsed = 00:00:41 . Memory (MB): peak = 1632.074 ; gain = 853.430
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Timing Optimization
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Timing Optimization : Time (s): cpu = 00:00:39 ; elapsed = 00:00:42 . Memory (MB): peak = 1659.352 ; gain = 880.707
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Technology Mapping
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Technology Mapping : Time (s): cpu = 00:00:39 ; elapsed = 00:00:42 . Memory (MB): peak = 1660.086 ; gain = 881.441
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start IO Insertion
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Flattening Before IO Insertion
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Flattening Before IO Insertion
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Final Netlist Cleanup
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Final Netlist Cleanup
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished IO Insertion : Time (s): cpu = 00:00:46 ; elapsed = 00:00:49 . Memory (MB): peak = 1893.074 ; gain = 1114.430
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Renaming Generated Instances
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Renaming Generated Instances : Time (s): cpu = 00:00:46 ; elapsed = 00:00:49 . Memory (MB): peak = 1893.074 ; gain = 1114.430
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Rebuilding User Hierarchy
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Rebuilding User Hierarchy : Time (s): cpu = 00:00:46 ; elapsed = 00:00:49 . Memory (MB): peak = 1893.074 ; gain = 1114.430
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Renaming Generated Ports
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Renaming Generated Ports : Time (s): cpu = 00:00:46 ; elapsed = 00:00:49 . Memory (MB): peak = 1893.074 ; gain = 1114.430
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Handling Custom Attributes
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Handling Custom Attributes : Time (s): cpu = 00:00:46 ; elapsed = 00:00:49 . Memory (MB): peak = 1893.074 ; gain = 1114.430
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Renaming Generated Nets
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Finished Renaming Generated Nets : Time (s): cpu = 00:00:46 ; elapsed = 00:00:49 . Memory (MB): peak = 1893.074 ; gain = 1114.430
+---------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Start Writing Synthesis Report
+---------------------------------------------------------------------------------
+
+Report BlackBoxes: 
++-+--------------+----------+
+| |BlackBox name |Instances |
++-+--------------+----------+
++-+--------------+----------+
+
+Report Cell Usage: 
++------+----------+------+
+|      |Cell      |Count |
++------+----------+------+
+|1     |LUT1      |     4|
+|2     |LUT2      |    22|
+|3     |LUT3      |    34|
+|4     |LUT4      |    23|
+|5     |LUT5      |    43|
+|6     |LUT6      |    72|
+|7     |OSERDESE2 |     8|
+|9     |FDPE      |     2|
+|10    |FDRE      |   117|
+|11    |FDSE      |    15|
+|12    |OBUFDS    |     4|
++------+----------+------+
+---------------------------------------------------------------------------------
+Finished Writing Synthesis Report : Time (s): cpu = 00:00:46 ; elapsed = 00:00:49 . Memory (MB): peak = 1893.074 ; gain = 1114.430
+---------------------------------------------------------------------------------
+Synthesis finished with 0 errors, 0 critical warnings and 0 warnings.
+Synthesis Optimization Runtime : Time (s): cpu = 00:00:34 ; elapsed = 00:00:46 . Memory (MB): peak = 1893.074 ; gain = 1031.785
+Synthesis Optimization Complete : Time (s): cpu = 00:00:46 ; elapsed = 00:00:50 . Memory (MB): peak = 1893.074 ; gain = 1114.430
+INFO: [Project 1-571] Translating synthesized netlist
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.006 . Memory (MB): peak = 1893.074 ; gain = 0.000
+INFO: [Netlist 29-17] Analyzing 4 Unisim elements for replacement
+INFO: [Netlist 29-28] Unisim Transformation completed in 0 CPU seconds
+INFO: [Project 1-570] Preparing netlist for logic optimization
+INFO: [Opt 31-138] Pushed 0 inverter(s) to 0 load pin(s).
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 1896.230 ; gain = 0.000
+INFO: [Project 1-111] Unisim Transformation Summary:
+No Unisim elements were transformed.
+
+Synth Design complete | Checksum: 5e2315d4
+INFO: [Common 17-83] Releasing license: Synthesis
+40 Infos, 1 Warnings, 0 Critical Warnings and 0 Errors encountered.
+synth_design completed successfully
+synth_design: Time (s): cpu = 00:00:54 ; elapsed = 00:01:07 . Memory (MB): peak = 1896.230 ; gain = 1353.891
+Write ShapeDB Complete: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.002 . Memory (MB): peak = 1896.230 ; gain = 0.000
+INFO: [Common 17-1381] The checkpoint 'D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.runs/rgb2dvi_0_synth_1/rgb2dvi_0.dcp' has been generated.
+WARNING: [Coretcl 2-1799] Unable to create IP cache entry for IP rgb2dvi_0: Unable to determine cache-id for IP rgb2dvi_0
+INFO: [Coretcl 2-1174] Renamed 10 cell refs.
+Write ShapeDB Complete: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.002 . Memory (MB): peak = 1896.230 ; gain = 0.000
+INFO: [Common 17-1381] The checkpoint 'D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.runs/rgb2dvi_0_synth_1/rgb2dvi_0.dcp' has been generated.
+INFO: [Vivado 12-24828] Executing command : report_utilization -file rgb2dvi_0_utilization_synth.rpt -pb rgb2dvi_0_utilization_synth.pb
+INFO: [Common 17-206] Exiting Vivado at Fri Nov 20 01:22:56 2026...
