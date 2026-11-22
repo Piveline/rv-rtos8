@@ -41,4 +41,4 @@ EAStep()
      fi
 }
 
-EAStep vivado -log rgb2dvi_0.vds -m64 -product Vivado -mode batch -messageDb vivado.pb -notrace -source rgb2dvi_0.tcl
+EAStep vivado -log  -m64 -product Vivado -mode batch -messageDb vivado.pb -notrace -source 

@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<GenRun Id="synth_1" LaunchPart="xc7a200tsbg484-1" LaunchTime="1795105285" LaunchIncrCheckpoint="$PSRCDIR/utils_1/imports/synth_1/top.dcp">
+<GenRun Id="synth_1" LaunchPart="xc7a200tsbg484-1" LaunchTime="1795344492" LaunchIncrCheckpoint="$PSRCDIR/utils_1/imports/synth_1/top.dcp">
   <File Type="PA-TCL" Name="RV32IM54F8SPSoCTOP.tcl"/>
-  <File Type="RDS-PROPCONSTRS" Name="RV32IM54F8SPSoCTOP_drc_synth.rpt"/>
   <File Type="REPORTS-TCL" Name="RV32IM54F8SPSoCTOP_reports.tcl"/>
   <File Type="RDS-RDS" Name="RV32IM54F8SPSoCTOP.vds"/>
+  <File Type="RDS-PROPCONSTRS" Name="RV32IM54F8SPSoCTOP_drc_synth.rpt"/>
   <File Type="RDS-UTIL" Name="RV32IM54F8SPSoCTOP_utilization_synth.rpt"/>
   <File Type="RDS-UTIL-PB" Name="RV32IM54F8SPSoCTOP_utilization_synth.pb"/>
   <File Type="RDS-DCP" Name="RV32IM54F8SPSoCTOP.dcp"/>
@@ -30,6 +30,13 @@
     <File Path="$PPRDIR/../../../RTL/RV32/modules/firmware_tasks.mem">
       <FileInfo>
         <Attr Name="UsedIn" Val="synthesis"/>
+        <Attr Name="UsedIn" Val="simulation"/>
+      </FileInfo>
+    </File>
+    <File Path="$PSRCDIR/sources_1/ip/rgb2dvi_0/rgb2dvi_0.xci">
+      <FileInfo>
+        <Attr Name="UsedIn" Val="synthesis"/>
+        <Attr Name="UsedIn" Val="implementation"/>
         <Attr Name="UsedIn" Val="simulation"/>
       </FileInfo>
     </File>
@@ -536,5 +543,4 @@
     </Step>
   </Strategy>
   <BlockFileSet Type="BlockSrcs" Name="clk_wiz_0"/>
-  <BlockFileSet Type="BlockSrcs" Name="rgb2dvi_0"/>
 </GenRun>

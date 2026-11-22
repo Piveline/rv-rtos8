@@ -3,15 +3,15 @@
 # SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
 # IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
 # SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
-# Start of session at: Fri Nov 20 01:22:59 2026
-# Process ID         : 17616
+# Start of session at: Sun Nov 22 19:48:14 2026
+# Process ID         : 6328
 # Current directory  : D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.runs/synth_1
 # Command line       : vivado.exe -log RV32IM54F8SPSoCTOP.vds -product Vivado -mode batch -messageDb vivado.pb -notrace -source RV32IM54F8SPSoCTOP.tcl
 # Log file           : D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.runs/synth_1/RV32IM54F8SPSoCTOP.vds
 # Journal file       : D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.runs/synth_1\vivado.jou
 # Running On         : DESKTOP-7K1O4NB
 # Platform           : Windows Server 2016 or Windows 10
-# Operating System   : 26200
+# Operating System   : 26300
 # Processor Detail   : 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz
 # CPU Frequency      : 2419 MHz
 # CPU Physical cores : 4
@@ -19,14 +19,10 @@
 # Host memory        : 16873 MB
 # Swap memory        : 17179 MB
 # Total Virtual      : 34053 MB
-# Available Virtual  : 20094 MB
+# Available Virtual  : 20227 MB
 #-----------------------------------------------------------
 source RV32IM54F8SPSoCTOP.tcl -notrace
-create_project: Time (s): cpu = 00:00:11 ; elapsed = 00:00:08 . Memory (MB): peak = 530.340 ; gain = 221.484
-INFO: [IP_Flow 19-234] Refreshing IP repositories
-WARNING: [IP_Flow 19-2248] Failed to load user IP repository 'd:/sangmy/rv-rtos8/FPGA/vivado-library-master'; Can't find the specified path.
-If this directory should no longer be in your list of user repositories, go to the IP Settings dialog and remove it.
-INFO: [IP_Flow 19-2313] Loaded Vivado IP repository 'V:/Vivado_IDE/2025.2/Vivado/data/ip'.
+create_project: Time (s): cpu = 00:00:09 ; elapsed = 00:00:07 . Memory (MB): peak = 529.383 ; gain = 217.402
 Command: read_checkpoint -auto_incremental -incremental D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.srcs/utils_1/imports/synth_1/top.dcp
 INFO: [Vivado 12-5825] Read reference checkpoint from D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.srcs/utils_1/imports/synth_1/top.dcp for incremental synthesis
 INFO: [Vivado 12-7989] Please ensure there are no constraint changes
@@ -41,9 +37,9 @@ INFO: [Designutils 20-5440] No compile time benefit to using incremental synthes
 INFO: [Designutils 20-4379] Flow is switching to default flow due to incremental criteria not met. If you would like to alter this behaviour and have the flow terminate instead, please set the following parameter config_implementation {autoIncr.Synth.RejectBehavior Terminate}
 INFO: [Synth 8-7079] Multithreading enabled for synth_design using a maximum of 2 processes.
 INFO: [Synth 8-7078] Launching helper process for spawning children vivado processes
-INFO: [Synth 8-7075] Helper process launched with PID 17496
+INFO: [Synth 8-7075] Helper process launched with PID 1904
 ---------------------------------------------------------------------------------
-Starting RTL Elaboration : Time (s): cpu = 00:00:08 ; elapsed = 00:00:08 . Memory (MB): peak = 1321.836 ; gain = 542.219
+Starting RTL Elaboration : Time (s): cpu = 00:00:06 ; elapsed = 00:00:07 . Memory (MB): peak = 1325.191 ; gain = 544.336
 ---------------------------------------------------------------------------------
 INFO: [Synth 8-11241] undeclared symbol 'mret_executed', assumed default net type 'wire' [D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:713]
 INFO: [Synth 8-11241] undeclared symbol 'pth_read', assumed default net type 'wire' [D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:715]
@@ -53,8 +49,8 @@ INFO: [Synth 8-11241] undeclared symbol 'mret_done', assumed default net type 'w
 INFO: [Synth 8-11241] undeclared symbol 'exr_data_stall', assumed default net type 'wire' [D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:854]
 INFO: [Synth 8-11241] undeclared symbol 'goto_mtvec', assumed default net type 'wire' [D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.srcs/sources_1/imports/modules/RV32IM54F_8SP.v:970]
 INFO: [Synth 8-6157] synthesizing module 'RV32IM54F8SPSoCTOP' [D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.srcs/sources_1/imports/modules/54F8SP_SoC_TOP.v:1]
-INFO: [Synth 8-6157] synthesizing module 'clk_wiz_0' [D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.runs/synth_1/.Xil/Vivado-17616-DESKTOP-7K1O4NB/realtime/clk_wiz_0_stub.v:6]
-INFO: [Synth 8-6155] done synthesizing module 'clk_wiz_0' (0#1) [D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.runs/synth_1/.Xil/Vivado-17616-DESKTOP-7K1O4NB/realtime/clk_wiz_0_stub.v:6]
+INFO: [Synth 8-6157] synthesizing module 'clk_wiz_0' [D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.runs/synth_1/.Xil/Vivado-6328-DESKTOP-7K1O4NB/realtime/clk_wiz_0_stub.v:6]
+INFO: [Synth 8-6155] done synthesizing module 'clk_wiz_0' (0#1) [D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.runs/synth_1/.Xil/Vivado-6328-DESKTOP-7K1O4NB/realtime/clk_wiz_0_stub.v:6]
 INFO: [Synth 8-6157] synthesizing module 'IOBUF' [V:/Vivado_IDE/2025.2/Vivado/scripts/rt/data/unisim_comp.v:87566]
 	Parameter DRIVE bound to: 12 - type: integer 
 	Parameter IBUF_LOW_PWR bound to: FALSE - type: string 
@@ -177,8 +173,8 @@ INFO: [Synth 8-3876] $readmem data file './cp437_8x16.mem' is read successfully 
 INFO: [Synth 8-6155] done synthesizing module 'font_rom' (0#1) [D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.srcs/sources_1/imports/modules/font_rom.v:1]
 INFO: [Synth 8-6157] synthesizing module 'vga_ctrl' [D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.srcs/sources_1/imports/modules/vga_ctrl.v:1]
 INFO: [Synth 8-6155] done synthesizing module 'vga_ctrl' (0#1) [D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.srcs/sources_1/imports/modules/vga_ctrl.v:1]
-INFO: [Synth 8-6157] synthesizing module 'rgb2dvi_0' [D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.runs/synth_1/.Xil/Vivado-17616-DESKTOP-7K1O4NB/realtime/rgb2dvi_0_stub.v:6]
-INFO: [Synth 8-6155] done synthesizing module 'rgb2dvi_0' (0#1) [D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.runs/synth_1/.Xil/Vivado-17616-DESKTOP-7K1O4NB/realtime/rgb2dvi_0_stub.v:6]
+INFO: [Synth 8-6157] synthesizing module 'rgb2dvi_0' [D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.runs/synth_1/.Xil/Vivado-6328-DESKTOP-7K1O4NB/realtime/rgb2dvi_0_stub.v:6]
+INFO: [Synth 8-6155] done synthesizing module 'rgb2dvi_0' (0#1) [D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.runs/synth_1/.Xil/Vivado-6328-DESKTOP-7K1O4NB/realtime/rgb2dvi_0_stub.v:6]
 INFO: [Synth 8-6155] done synthesizing module 'RV32IM54F8SPSoCTOP' (0#1) [D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.srcs/sources_1/imports/modules/54F8SP_SoC_TOP.v:1]
 WARNING: [Synth 8-7137] Register divisor_latch_reg in module Divider_WORD has both Set and reset with same priority. This may cause simulation mismatches. Consider rewriting code  [D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.srcs/sources_1/imports/modules/Divider_WORD.v:75]
 WARNING: [Synth 8-6014] Unused sequential element branch_prediction_reg was removed.  [D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.srcs/sources_1/imports/modules/Branch_Predictor.v:35]
@@ -292,61 +288,59 @@ WARNING: [Synth 8-7129] Port WB_csr_write_address[0] in module HazardUnit is eit
 WARNING: [Synth 8-7129] Port EXR_jump in module ExceptionDetector is either unconnected or has no load
 INFO: [Common 17-14] Message 'Synth 8-7129' appears 100 times and further instances of the messages will be disabled. Use the Tcl command set_msg_config to change the current settings.
 ---------------------------------------------------------------------------------
-Finished RTL Elaboration : Time (s): cpu = 00:00:12 ; elapsed = 00:00:13 . Memory (MB): peak = 1509.559 ; gain = 729.941
+Finished RTL Elaboration : Time (s): cpu = 00:00:11 ; elapsed = 00:00:12 . Memory (MB): peak = 1508.816 ; gain = 727.961
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
 Start Handling Custom Attributes
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
-Finished Handling Custom Attributes : Time (s): cpu = 00:00:12 ; elapsed = 00:00:13 . Memory (MB): peak = 1509.559 ; gain = 729.941
+Finished Handling Custom Attributes : Time (s): cpu = 00:00:11 ; elapsed = 00:00:13 . Memory (MB): peak = 1508.816 ; gain = 727.961
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
-Finished RTL Optimization Phase 1 : Time (s): cpu = 00:00:12 ; elapsed = 00:00:13 . Memory (MB): peak = 1509.559 ; gain = 729.941
+Finished RTL Optimization Phase 1 : Time (s): cpu = 00:00:11 ; elapsed = 00:00:13 . Memory (MB): peak = 1508.816 ; gain = 727.961
 ---------------------------------------------------------------------------------
-Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.159 . Memory (MB): peak = 1509.559 ; gain = 0.000
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.208 . Memory (MB): peak = 1508.816 ; gain = 0.000
 INFO: [Netlist 29-17] Analyzing 2 Unisim elements for replacement
 INFO: [Netlist 29-28] Unisim Transformation completed in 0 CPU seconds
 INFO: [Project 1-570] Preparing netlist for logic optimization
 
 Processing XDC Constraints
 Initializing timing engine
-Parsing XDC File [d:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.gen/sources_1/ip/clk_wiz_0/clk_wiz_0/clk_wiz_0_in_context.xdc] for cell 'pll_inst'
-Finished Parsing XDC File [d:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.gen/sources_1/ip/clk_wiz_0/clk_wiz_0/clk_wiz_0_in_context.xdc] for cell 'pll_inst'
 Parsing XDC File [d:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.gen/sources_1/ip/rgb2dvi_0/rgb2dvi_0/rgb2dvi_0_in_context.xdc] for cell 'hdmi_encoder'
 Finished Parsing XDC File [d:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.gen/sources_1/ip/rgb2dvi_0/rgb2dvi_0/rgb2dvi_0_in_context.xdc] for cell 'hdmi_encoder'
+Parsing XDC File [d:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.gen/sources_1/ip/clk_wiz_0/clk_wiz_0/clk_wiz_0_in_context.xdc] for cell 'pll_inst'
+Finished Parsing XDC File [d:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.gen/sources_1/ip/clk_wiz_0/clk_wiz_0/clk_wiz_0_in_context.xdc] for cell 'pll_inst'
 Parsing XDC File [D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.srcs/constrs_1/imports/new/gmc_keyboard_lab01.xdc]
-CRITICAL WARNING: [Constraints 18-1056] Clock 'sys_clk_pin' completely overrides clock 'CLK100MHZ'.
-New: create_clock -period 10.000 -name sys_clk_pin -waveform {0.000 5.000} [get_ports CLK100MHZ], [D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.srcs/constrs_1/imports/new/gmc_keyboard_lab01.xdc:12]
-Previous: create_clock -period 10.000 [get_ports CLK100MHZ], [d:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.gen/sources_1/ip/clk_wiz_0/clk_wiz_0/clk_wiz_0_in_context.xdc:1]
-Resolution: Review the constraint files and remove the redundant clock definition(s). If the clock constraints are not saved in a file, you can first save the constraints to an XDC file and reload the design once the constraints have been corrected.
 Finished Parsing XDC File [D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.srcs/constrs_1/imports/new/gmc_keyboard_lab01.xdc]
 INFO: [Project 1-236] Implementation specific constraints were found while reading constraint file [D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.srcs/constrs_1/imports/new/gmc_keyboard_lab01.xdc]. These constraints will be ignored for synthesis but will be used in implementation. Impacted constraints are listed in the file [.Xil/RV32IM54F8SPSoCTOP_propImpl.xdc].
 Resolution: To avoid this warning, move constraints listed in [.Xil/RV32IM54F8SPSoCTOP_propImpl.xdc] to another XDC file and exclude this new file from synthesis with the used_in_synthesis property (File Properties dialog in GUI) and re-run elaboration/synthesis.
+Parsing XDC File [D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.runs/synth_1/dont_touch.xdc]
+Finished Parsing XDC File [D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.runs/synth_1/dont_touch.xdc]
 Completed Processing XDC Constraints
 
-Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.003 . Memory (MB): peak = 1585.316 ; gain = 0.000
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.004 . Memory (MB): peak = 1586.840 ; gain = 0.000
 INFO: [Project 1-111] Unisim Transformation Summary:
   A total of 2 instances were transformed.
   IOBUF => IOBUF (IBUF, OBUFT): 2 instances
 
-Constraint Validation Runtime : Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.086 . Memory (MB): peak = 1585.316 ; gain = 0.000
+Constraint Validation Runtime : Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.077 . Memory (MB): peak = 1586.840 ; gain = 0.000
 INFO: [Designutils 20-5440] No compile time benefit to using incremental synthesis; A full resynthesis will be run
 INFO: [Designutils 20-4379] Flow is switching to default flow due to incremental criteria not met. If you would like to alter this behaviour and have the flow terminate instead, please set the following parameter config_implementation {autoIncr.Synth.RejectBehavior Terminate}
 ---------------------------------------------------------------------------------
-Finished Constraint Validation : Time (s): cpu = 00:00:25 ; elapsed = 00:00:26 . Memory (MB): peak = 1585.316 ; gain = 805.699
+Finished Constraint Validation : Time (s): cpu = 00:00:31 ; elapsed = 00:00:33 . Memory (MB): peak = 1586.840 ; gain = 805.984
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
 Start Loading Part and Timing Information
 ---------------------------------------------------------------------------------
 Loading part: xc7a200tsbg484-1
 ---------------------------------------------------------------------------------
-Finished Loading Part and Timing Information : Time (s): cpu = 00:00:25 ; elapsed = 00:00:26 . Memory (MB): peak = 1585.316 ; gain = 805.699
+Finished Loading Part and Timing Information : Time (s): cpu = 00:00:31 ; elapsed = 00:00:33 . Memory (MB): peak = 1586.840 ; gain = 805.984
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
 Start Applying 'set_property' XDC Constraints
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
-Finished applying 'set_property' XDC Constraints : Time (s): cpu = 00:00:25 ; elapsed = 00:00:26 . Memory (MB): peak = 1585.316 ; gain = 805.699
+Finished applying 'set_property' XDC Constraints : Time (s): cpu = 00:00:31 ; elapsed = 00:00:33 . Memory (MB): peak = 1586.840 ; gain = 805.984
 ---------------------------------------------------------------------------------
 INFO: [Synth 8-802] inferred FSM for state register 'stage_reg' in module 'Multiplier_WORD'
 INFO: [Synth 8-802] inferred FSM for state register 'state_reg' in module 'Divider_WORD'
@@ -387,7 +381,7 @@ INFO: [Synth 8-3354] encoded FSM with state register 'state_reg' using encoding 
 ---------------------------------------------------------------------------------------------------
 INFO: [Synth 8-3354] encoded FSM with state register 'trap_handle_state_reg' using encoding 'one-hot' in module 'TrapController'
 ---------------------------------------------------------------------------------
-Finished RTL Optimization Phase 2 : Time (s): cpu = 00:00:28 ; elapsed = 00:00:30 . Memory (MB): peak = 1585.316 ; gain = 805.699
+Finished RTL Optimization Phase 2 : Time (s): cpu = 00:00:34 ; elapsed = 00:00:37 . Memory (MB): peak = 1586.840 ; gain = 805.984
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
 Start RTL Component Statistics 
@@ -578,7 +572,7 @@ WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg
 WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[17]__1) is unused and will be removed from module ALU.
 WARNING: [Synth 8-3332] Sequential element (multiplier_word/prod_unsigned_s2_reg[47]__2) is unused and will be removed from module ALU.
 ---------------------------------------------------------------------------------
-Finished Cross Boundary and Area Optimization : Time (s): cpu = 00:01:05 ; elapsed = 00:01:06 . Memory (MB): peak = 1700.164 ; gain = 920.547
+Finished Cross Boundary and Area Optimization : Time (s): cpu = 00:01:21 ; elapsed = 00:01:25 . Memory (MB): peak = 1694.777 ; gain = 913.922
 ---------------------------------------------------------------------------------
  Sort Area is  multiplier_word/mult_result_0 : 0 0 : 2701 5047 : Used 1 time 100
  Sort Area is  multiplier_word/mult_result_0 : 0 1 : 2346 5047 : Used 1 time 100
@@ -638,13 +632,13 @@ Finished ROM, RAM, DSP, Shift Register and Retiming Reporting
 Start Applying XDC Timing Constraints
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
-Finished Applying XDC Timing Constraints : Time (s): cpu = 00:01:15 ; elapsed = 00:01:17 . Memory (MB): peak = 1770.066 ; gain = 990.449
+Finished Applying XDC Timing Constraints : Time (s): cpu = 00:01:30 ; elapsed = 00:01:34 . Memory (MB): peak = 1764.500 ; gain = 983.645
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
 Start Timing Optimization
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
-Finished Timing Optimization : Time (s): cpu = 00:01:27 ; elapsed = 00:01:29 . Memory (MB): peak = 1875.465 ; gain = 1095.848
+Finished Timing Optimization : Time (s): cpu = 00:01:41 ; elapsed = 00:01:45 . Memory (MB): peak = 1871.684 ; gain = 1090.828
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
 Start ROM, RAM, DSP, Shift Register and Retiming Reporting
@@ -694,7 +688,7 @@ INFO: [Synth 8-7052] The timing for the instance cpu/instruction_memory/instruct
 INFO: [Synth 8-7052] The timing for the instance cpu/instruction_memory/instruction_reg_3 (implemented as a Block RAM) might be sub-optimal as no optional output register could be merged into the ram block. Providing additional output register may help in improving timing.
 INFO: [Synth 8-7052] The timing for the instance vram_inst/mem_reg (implemented as a Block RAM) might be sub-optimal as no optional output register could be merged into the ram block. Providing additional output register may help in improving timing.
 ---------------------------------------------------------------------------------
-Finished Technology Mapping : Time (s): cpu = 00:01:31 ; elapsed = 00:01:34 . Memory (MB): peak = 1989.879 ; gain = 1210.262
+Finished Technology Mapping : Time (s): cpu = 00:01:44 ; elapsed = 00:01:49 . Memory (MB): peak = 1985.992 ; gain = 1205.137
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
 Start IO Insertion
@@ -712,37 +706,37 @@ Start Final Netlist Cleanup
 Finished Final Netlist Cleanup
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
-Finished IO Insertion : Time (s): cpu = 00:01:36 ; elapsed = 00:01:39 . Memory (MB): peak = 2082.066 ; gain = 1302.449
+Finished IO Insertion : Time (s): cpu = 00:01:49 ; elapsed = 00:01:54 . Memory (MB): peak = 2078.836 ; gain = 1297.980
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
 Start Renaming Generated Instances
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
-Finished Renaming Generated Instances : Time (s): cpu = 00:01:36 ; elapsed = 00:01:39 . Memory (MB): peak = 2082.066 ; gain = 1302.449
+Finished Renaming Generated Instances : Time (s): cpu = 00:01:49 ; elapsed = 00:01:54 . Memory (MB): peak = 2078.836 ; gain = 1297.980
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
 Start Rebuilding User Hierarchy
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
-Finished Rebuilding User Hierarchy : Time (s): cpu = 00:01:37 ; elapsed = 00:01:39 . Memory (MB): peak = 2082.066 ; gain = 1302.449
+Finished Rebuilding User Hierarchy : Time (s): cpu = 00:01:49 ; elapsed = 00:01:54 . Memory (MB): peak = 2078.836 ; gain = 1297.980
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
 Start Renaming Generated Ports
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
-Finished Renaming Generated Ports : Time (s): cpu = 00:01:37 ; elapsed = 00:01:39 . Memory (MB): peak = 2082.066 ; gain = 1302.449
+Finished Renaming Generated Ports : Time (s): cpu = 00:01:49 ; elapsed = 00:01:54 . Memory (MB): peak = 2078.836 ; gain = 1297.980
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
 Start Handling Custom Attributes
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
-Finished Handling Custom Attributes : Time (s): cpu = 00:01:37 ; elapsed = 00:01:39 . Memory (MB): peak = 2089.352 ; gain = 1309.734
+Finished Handling Custom Attributes : Time (s): cpu = 00:01:49 ; elapsed = 00:01:54 . Memory (MB): peak = 2085.918 ; gain = 1305.062
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
 Start Renaming Generated Nets
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
-Finished Renaming Generated Nets : Time (s): cpu = 00:01:37 ; elapsed = 00:01:39 . Memory (MB): peak = 2089.352 ; gain = 1309.734
+Finished Renaming Generated Nets : Time (s): cpu = 00:01:49 ; elapsed = 00:01:54 . Memory (MB): peak = 2085.918 ; gain = 1305.062
 ---------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------
 Start Writing Synthesis Report
@@ -795,18 +789,18 @@ Report Cell Usage:
 |28    |OBUF     |     9|
 +------+---------+------+
 ---------------------------------------------------------------------------------
-Finished Writing Synthesis Report : Time (s): cpu = 00:01:37 ; elapsed = 00:01:39 . Memory (MB): peak = 2089.352 ; gain = 1309.734
+Finished Writing Synthesis Report : Time (s): cpu = 00:01:49 ; elapsed = 00:01:54 . Memory (MB): peak = 2085.918 ; gain = 1305.062
 ---------------------------------------------------------------------------------
 Synthesis finished with 0 errors, 0 critical warnings and 196 warnings.
-Synthesis Optimization Runtime : Time (s): cpu = 00:01:19 ; elapsed = 00:01:34 . Memory (MB): peak = 2089.352 ; gain = 1233.977
-Synthesis Optimization Complete : Time (s): cpu = 00:01:37 ; elapsed = 00:01:40 . Memory (MB): peak = 2089.352 ; gain = 1309.734
+Synthesis Optimization Runtime : Time (s): cpu = 00:01:32 ; elapsed = 00:01:46 . Memory (MB): peak = 2085.918 ; gain = 1227.039
+Synthesis Optimization Complete : Time (s): cpu = 00:01:50 ; elapsed = 00:01:54 . Memory (MB): peak = 2085.918 ; gain = 1305.062
 INFO: [Project 1-571] Translating synthesized netlist
-Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.133 . Memory (MB): peak = 2094.535 ; gain = 0.000
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.094 . Memory (MB): peak = 2091.086 ; gain = 0.000
 INFO: [Netlist 29-17] Analyzing 336 Unisim elements for replacement
 INFO: [Netlist 29-28] Unisim Transformation completed in 0 CPU seconds
 INFO: [Project 1-570] Preparing netlist for logic optimization
 INFO: [Opt 31-138] Pushed 0 inverter(s) to 0 load pin(s).
-Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.004 . Memory (MB): peak = 2104.785 ; gain = 0.000
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.003 . Memory (MB): peak = 2101.320 ; gain = 0.000
 INFO: [Project 1-111] Unisim Transformation Summary:
   A total of 19 instances were transformed.
   IOBUF => IOBUF (IBUF, OBUFT): 2 instances
@@ -815,11 +809,10 @@ INFO: [Project 1-111] Unisim Transformation Summary:
 
 Synth Design complete | Checksum: d619a503
 INFO: [Common 17-83] Releasing license: Synthesis
-148 Infos, 211 Warnings, 1 Critical Warnings and 0 Errors encountered.
+146 Infos, 210 Warnings, 0 Critical Warnings and 0 Errors encountered.
 synth_design completed successfully
-synth_design: Time (s): cpu = 00:01:46 ; elapsed = 00:01:52 . Memory (MB): peak = 2104.785 ; gain = 1560.363
-INFO: [runtcl-6] Synthesis results are not added to the cache due to CRITICAL_WARNING
-Write ShapeDB Complete: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.010 . Memory (MB): peak = 2104.785 ; gain = 0.000
+synth_design: Time (s): cpu = 00:01:57 ; elapsed = 00:02:15 . Memory (MB): peak = 2101.320 ; gain = 1553.125
+Write ShapeDB Complete: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.007 . Memory (MB): peak = 2101.320 ; gain = 0.000
 INFO: [Common 17-1381] The checkpoint 'D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.runs/synth_1/RV32IM54F8SPSoCTOP.dcp' has been generated.
 INFO: [Vivado 12-24828] Executing command : report_utilization -file RV32IM54F8SPSoCTOP_utilization_synth.rpt -pb RV32IM54F8SPSoCTOP_utilization_synth.pb
-INFO: [Common 17-206] Exiting Vivado at Fri Nov 20 01:25:05 2026...
+INFO: [Common 17-206] Exiting Vivado at Sun Nov 22 19:50:40 2026...

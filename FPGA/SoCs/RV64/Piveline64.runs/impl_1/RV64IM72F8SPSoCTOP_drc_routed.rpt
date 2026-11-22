@@ -1,7 +1,7 @@
 Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
 ------------------------------------------------------------------------------------------------------------------------------------------------
 | Tool Version : Vivado v.2025.2 (win64) Build 6299465 Fri Nov 14 19:35:11 GMT 2025
-| Date         : Sat Nov 21 22:03:55 2026
+| Date         : Sun Nov 22 20:09:52 2026
 | Host         : DESKTOP-7K1O4NB running 64-bit major release  (build 9200)
 | Command      : report_drc -file RV64IM72F8SPSoCTOP_drc_routed.rpt -pb RV64IM72F8SPSoCTOP_drc_routed.pb -rpx RV64IM72F8SPSoCTOP_drc_routed.rpx
 | Design       : RV64IM72F8SPSoCTOP
@@ -24,13 +24,13 @@ Table of Contents
       Design limits: <entire design considered>
            Ruledeck: default
              Max checks: <unlimited>
-             Checks found: 262
+             Checks found: 264
 +-----------+----------+----------------------------+--------+
 | Rule      | Severity | Description                | Checks |
 +-----------+----------+----------------------------+--------+
 | CHECK-3   | Warning  | Report rule limit reached  | 1      |
 | DPIP-1    | Warning  | Input pipelining           | 39     |
-| DPOP-1    | Warning  | PREG Output pipelining     | 12     |
+| DPOP-1    | Warning  | PREG Output pipelining     | 14     |
 | DPOP-2    | Warning  | MREG Output pipelining     | 20     |
 | DPOR-1    | Warning  | Asynchronous load check    | 170    |
 | REQP-1839 | Warning  | RAMB36 async control check | 20     |
@@ -260,40 +260,50 @@ Related violations: <none>
 
 DPOP-1#5 Warning
 PREG Output pipelining  
-DSP cpu/alu/multiplier_dword/mult_ALBH output cpu/alu/multiplier_dword/mult_ALBH/P[47:0] is not pipelined (PREG=0). Pipelining the DSP48 output will improve performance and often saves power so it is suggested whenever possible to fully pipeline this function.  If this DSP48 function was inferred, it is suggested to describe an additional register stage after this function.  If the DSP48 was instantiated in the design, it is suggested to set the PREG attribute to 1.
+DSP cpu/alu/multiplier_dword/mult_AHBL__2 output cpu/alu/multiplier_dword/mult_AHBL__2/P[47:0] is not pipelined (PREG=0). Pipelining the DSP48 output will improve performance and often saves power so it is suggested whenever possible to fully pipeline this function.  If this DSP48 function was inferred, it is suggested to describe an additional register stage after this function.  If the DSP48 was instantiated in the design, it is suggested to set the PREG attribute to 1.
 Related violations: <none>
 
 DPOP-1#6 Warning
 PREG Output pipelining  
-DSP cpu/alu/multiplier_dword/mult_ALBH__1 output cpu/alu/multiplier_dword/mult_ALBH__1/P[47:0] is not pipelined (PREG=0). Pipelining the DSP48 output will improve performance and often saves power so it is suggested whenever possible to fully pipeline this function.  If this DSP48 function was inferred, it is suggested to describe an additional register stage after this function.  If the DSP48 was instantiated in the design, it is suggested to set the PREG attribute to 1.
+DSP cpu/alu/multiplier_dword/mult_ALBH output cpu/alu/multiplier_dword/mult_ALBH/P[47:0] is not pipelined (PREG=0). Pipelining the DSP48 output will improve performance and often saves power so it is suggested whenever possible to fully pipeline this function.  If this DSP48 function was inferred, it is suggested to describe an additional register stage after this function.  If the DSP48 was instantiated in the design, it is suggested to set the PREG attribute to 1.
 Related violations: <none>
 
 DPOP-1#7 Warning
 PREG Output pipelining  
-DSP cpu/alu/multiplier_dword/mult_ALBH__2 output cpu/alu/multiplier_dword/mult_ALBH__2/P[47:0] is not pipelined (PREG=0). Pipelining the DSP48 output will improve performance and often saves power so it is suggested whenever possible to fully pipeline this function.  If this DSP48 function was inferred, it is suggested to describe an additional register stage after this function.  If the DSP48 was instantiated in the design, it is suggested to set the PREG attribute to 1.
+DSP cpu/alu/multiplier_dword/mult_ALBH__1 output cpu/alu/multiplier_dword/mult_ALBH__1/P[47:0] is not pipelined (PREG=0). Pipelining the DSP48 output will improve performance and often saves power so it is suggested whenever possible to fully pipeline this function.  If this DSP48 function was inferred, it is suggested to describe an additional register stage after this function.  If the DSP48 was instantiated in the design, it is suggested to set the PREG attribute to 1.
 Related violations: <none>
 
 DPOP-1#8 Warning
 PREG Output pipelining  
-DSP cpu/alu/multiplier_dword/mult_ALBL output cpu/alu/multiplier_dword/mult_ALBL/P[47:0] is not pipelined (PREG=0). Pipelining the DSP48 output will improve performance and often saves power so it is suggested whenever possible to fully pipeline this function.  If this DSP48 function was inferred, it is suggested to describe an additional register stage after this function.  If the DSP48 was instantiated in the design, it is suggested to set the PREG attribute to 1.
+DSP cpu/alu/multiplier_dword/mult_ALBH__2 output cpu/alu/multiplier_dword/mult_ALBH__2/P[47:0] is not pipelined (PREG=0). Pipelining the DSP48 output will improve performance and often saves power so it is suggested whenever possible to fully pipeline this function.  If this DSP48 function was inferred, it is suggested to describe an additional register stage after this function.  If the DSP48 was instantiated in the design, it is suggested to set the PREG attribute to 1.
 Related violations: <none>
 
 DPOP-1#9 Warning
 PREG Output pipelining  
-DSP cpu/alu/multiplier_dword/mult_ALBL__1 output cpu/alu/multiplier_dword/mult_ALBL__1/P[47:0] is not pipelined (PREG=0). Pipelining the DSP48 output will improve performance and often saves power so it is suggested whenever possible to fully pipeline this function.  If this DSP48 function was inferred, it is suggested to describe an additional register stage after this function.  If the DSP48 was instantiated in the design, it is suggested to set the PREG attribute to 1.
+DSP cpu/alu/multiplier_dword/mult_ALBL output cpu/alu/multiplier_dword/mult_ALBL/P[47:0] is not pipelined (PREG=0). Pipelining the DSP48 output will improve performance and often saves power so it is suggested whenever possible to fully pipeline this function.  If this DSP48 function was inferred, it is suggested to describe an additional register stage after this function.  If the DSP48 was instantiated in the design, it is suggested to set the PREG attribute to 1.
 Related violations: <none>
 
 DPOP-1#10 Warning
 PREG Output pipelining  
-DSP cpu/alu/multiplier_dword/mult_ALBL__2 output cpu/alu/multiplier_dword/mult_ALBL__2/P[47:0] is not pipelined (PREG=0). Pipelining the DSP48 output will improve performance and often saves power so it is suggested whenever possible to fully pipeline this function.  If this DSP48 function was inferred, it is suggested to describe an additional register stage after this function.  If the DSP48 was instantiated in the design, it is suggested to set the PREG attribute to 1.
+DSP cpu/alu/multiplier_dword/mult_ALBL__0 output cpu/alu/multiplier_dword/mult_ALBL__0/P[47:0] is not pipelined (PREG=0). Pipelining the DSP48 output will improve performance and often saves power so it is suggested whenever possible to fully pipeline this function.  If this DSP48 function was inferred, it is suggested to describe an additional register stage after this function.  If the DSP48 was instantiated in the design, it is suggested to set the PREG attribute to 1.
 Related violations: <none>
 
 DPOP-1#11 Warning
 PREG Output pipelining  
-DSP cpu/alu/multiplier_word/mult_result output cpu/alu/multiplier_word/mult_result/P[47:0] is not pipelined (PREG=0). Pipelining the DSP48 output will improve performance and often saves power so it is suggested whenever possible to fully pipeline this function.  If this DSP48 function was inferred, it is suggested to describe an additional register stage after this function.  If the DSP48 was instantiated in the design, it is suggested to set the PREG attribute to 1.
+DSP cpu/alu/multiplier_dword/mult_ALBL__1 output cpu/alu/multiplier_dword/mult_ALBL__1/P[47:0] is not pipelined (PREG=0). Pipelining the DSP48 output will improve performance and often saves power so it is suggested whenever possible to fully pipeline this function.  If this DSP48 function was inferred, it is suggested to describe an additional register stage after this function.  If the DSP48 was instantiated in the design, it is suggested to set the PREG attribute to 1.
 Related violations: <none>
 
 DPOP-1#12 Warning
+PREG Output pipelining  
+DSP cpu/alu/multiplier_dword/mult_ALBL__2 output cpu/alu/multiplier_dword/mult_ALBL__2/P[47:0] is not pipelined (PREG=0). Pipelining the DSP48 output will improve performance and often saves power so it is suggested whenever possible to fully pipeline this function.  If this DSP48 function was inferred, it is suggested to describe an additional register stage after this function.  If the DSP48 was instantiated in the design, it is suggested to set the PREG attribute to 1.
+Related violations: <none>
+
+DPOP-1#13 Warning
+PREG Output pipelining  
+DSP cpu/alu/multiplier_word/mult_result output cpu/alu/multiplier_word/mult_result/P[47:0] is not pipelined (PREG=0). Pipelining the DSP48 output will improve performance and often saves power so it is suggested whenever possible to fully pipeline this function.  If this DSP48 function was inferred, it is suggested to describe an additional register stage after this function.  If the DSP48 was instantiated in the design, it is suggested to set the PREG attribute to 1.
+Related violations: <none>
+
+DPOP-1#14 Warning
 PREG Output pipelining  
 DSP cpu/alu/multiplier_word/mult_result__1 output cpu/alu/multiplier_word/mult_result__1/P[47:0] is not pipelined (PREG=0). Pipelining the DSP48 output will improve performance and often saves power so it is suggested whenever possible to fully pipeline this function.  If this DSP48 function was inferred, it is suggested to describe an additional register stage after this function.  If the DSP48 was instantiated in the design, it is suggested to set the PREG attribute to 1.
 Related violations: <none>

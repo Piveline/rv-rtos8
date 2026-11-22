@@ -3,15 +3,15 @@
 # SW Build 6299465 on Fri Nov 14 19:35:11 GMT 2025
 # IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
 # SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
-# Start of session at: Fri Nov 20 01:21:28 2026
-# Process ID         : 7932
+# Start of session at: Sun Nov 22 19:15:15 2026
+# Process ID         : 25768
 # Current directory  : D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.runs/rgb2dvi_0_synth_1
-# Command line       : vivado.exe -log rgb2dvi_0.vds -product Vivado -mode batch -messageDb vivado.pb -notrace -source rgb2dvi_0.tcl
-# Log file           : D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.runs/rgb2dvi_0_synth_1/rgb2dvi_0.vds
+# Command line       : vivado.exe -log -product Vivado -mode batch -messageDb vivado.pb -notrace -source
+# Log file           : D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.runs/rgb2dvi_0_synth_1/-product
 # Journal file       : D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.runs/rgb2dvi_0_synth_1\vivado.jou
 # Running On         : DESKTOP-7K1O4NB
 # Platform           : Windows Server 2016 or Windows 10
-# Operating System   : 26200
+# Operating System   : 26300
 # Processor Detail   : 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz
 # CPU Frequency      : 2419 MHz
 # CPU Physical cores : 4
@@ -19,6 +19,6 @@
 # Host memory        : 16873 MB
 # Swap memory        : 17179 MB
 # Total Virtual      : 34053 MB
-# Available Virtual  : 19981 MB
+# Available Virtual  : 20017 MB
 #-----------------------------------------------------------
-source rgb2dvi_0.tcl -notrace
+open_project Vivado

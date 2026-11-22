@@ -159,6 +159,8 @@ set_property used_in_implementation false [get_files D:/sangmy/rv-rtos8/FPGA/SoC
 read_xdc dont_touch.xdc
 set_property used_in_implementation false [get_files dont_touch.xdc]
 set_param ips.enableIPCacheLiteLoad 1
+
+read_checkpoint -auto_incremental -incremental D:/sangmy/rv-rtos8/FPGA/SoCs/RV64/Piveline64.srcs/utils_1/imports/synth_1/RV64IM72F8SPSoCTOP.dcp
 close [open __synthesis_is_running__ w]
 
 OPTRACE "synth_design" START { }

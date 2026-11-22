@@ -1,7 +1,7 @@
 Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 | Tool Version     : Vivado v.2025.2 (win64) Build 6299465 Fri Nov 14 19:35:11 GMT 2025
-| Date             : Sat Nov 21 22:04:21 2026
+| Date             : Sun Nov 22 20:10:16 2026
 | Host             : DESKTOP-7K1O4NB running 64-bit major release  (build 9200)
 | Command          : report_power -file RV64IM72F8SPSoCTOP_power_routed.rpt -pb RV64IM72F8SPSoCTOP_power_summary_routed.pb -rpx RV64IM72F8SPSoCTOP_power_routed.rpx
 | Design           : RV64IM72F8SPSoCTOP
@@ -30,10 +30,10 @@ Table of Contents
 ----------
 
 +--------------------------+--------------+
-| Total On-Chip Power (W)  | 0.458        |
+| Total On-Chip Power (W)  | 0.459        |
 | Design Power Budget (W)  | Unspecified* |
 | Power Budget Margin (W)  | NA           |
-| Dynamic (W)              | 0.305        |
+| Dynamic (W)              | 0.306        |
 | Device Static (W)        | 0.153        |
 | Effective TJA (C/W)      | 3.3          |
 | Max Ambient (C)          | 83.5         |
@@ -53,20 +53,20 @@ Table of Contents
 | On-Chip                  | Power (W) | Used     | Available | Utilization (%) |
 +--------------------------+-----------+----------+-----------+-----------------+
 | Clocks                   |     0.028 |        7 |       --- |             --- |
-| Slice Logic              |     0.010 |    27076 |       --- |             --- |
-|   LUT as Logic           |     0.009 |    12976 |    133800 |            9.70 |
+| Slice Logic              |     0.010 |    27150 |       --- |             --- |
+|   LUT as Logic           |     0.009 |    13005 |    133800 |            9.72 |
 |   CARRY4                 |    <0.001 |      616 |     33450 |            1.84 |
-|   Register               |    <0.001 |     7632 |    267600 |            2.85 |
+|   Register               |    <0.001 |     7706 |    267600 |            2.88 |
 |   F7/F8 Muxes            |    <0.001 |     1509 |    133800 |            1.13 |
 |   Others                 |     0.000 |       82 |       --- |             --- |
 |   LUT as Distributed RAM |     0.000 |        6 |     46200 |            0.01 |
-| Signals                  |     0.017 |    22065 |       --- |             --- |
+| Signals                  |     0.017 |    22128 |       --- |             --- |
 | Block RAM                |     0.013 |       17 |       365 |            4.66 |
 | PLL                      |     0.103 |        1 |        10 |           10.00 |
 | DSPs                     |    <0.001 |       20 |       740 |            2.70 |
 | I/O                      |     0.134 |       21 |       285 |            7.37 |
 | Static Power             |     0.153 |          |           |                 |
-| Total                    |     0.458 |          |           |                 |
+| Total                    |     0.459 |          |           |                 |
 +--------------------------+-----------+----------+-----------+-----------------+
 
 
@@ -129,15 +129,15 @@ Table of Contents
 2.2 Clock Constraints
 ---------------------
 
-+----------------------+----------------------------------+-----------------+
-| Clock                | Domain                           | Constraint (ns) |
-+----------------------+----------------------------------+-----------------+
-| clk_out1_clk_wiz_0_1 | pll_inst/inst/clk_out1_clk_wiz_0 |            40.0 |
-| clk_out2_clk_wiz_0_1 | pll_inst/inst/clk_out2_clk_wiz_0 |             8.0 |
-| clk_out3_clk_wiz_0_1 | pll_inst/inst/clk_out3_clk_wiz_0 |            10.0 |
-| clkfbout_clk_wiz_0_1 | pll_inst/inst/clkfbout_clk_wiz_0 |            10.0 |
-| sys_clk_pin          | CLK100MHZ                        |            10.0 |
-+----------------------+----------------------------------+-----------------+
++--------------------+----------------------------------+-----------------+
+| Clock              | Domain                           | Constraint (ns) |
++--------------------+----------------------------------+-----------------+
+| CLK100MHZ          | CLK100MHZ                        |            10.0 |
+| clk_out1_clk_wiz_0 | pll_inst/inst/clk_out1_clk_wiz_0 |            40.0 |
+| clk_out2_clk_wiz_0 | pll_inst/inst/clk_out2_clk_wiz_0 |             8.0 |
+| clk_out3_clk_wiz_0 | pll_inst/inst/clk_out3_clk_wiz_0 |            10.0 |
+| clkfbout_clk_wiz_0 | pll_inst/inst/clkfbout_clk_wiz_0 |            10.0 |
++--------------------+----------------------------------+-----------------+
 
 
 3. Detailed Reports
@@ -149,7 +149,7 @@ Table of Contents
 +--------------------------------------+-----------+
 | Name                                 | Power (W) |
 +--------------------------------------+-----------+
-| RV64IM72F8SPSoCTOP                   |     0.305 |
+| RV64IM72F8SPSoCTOP                   |     0.306 |
 |   cpu                                |     0.064 |
 |     alu                              |     0.009 |
 |       divider_dword                  |     0.002 |
@@ -159,7 +159,7 @@ Table of Contents
 |     data_memory                      |     0.009 |
 |     ex_ex2_register                  |     0.008 |
 |     ex_mem_register                  |     0.002 |
-|     exception_detector               |     0.003 |
+|     exception_detector               |     0.002 |
 |     exr_ex_register                  |     0.004 |
 |     id_exr_register                  |     0.003 |
 |     if_io_register                   |     0.002 |

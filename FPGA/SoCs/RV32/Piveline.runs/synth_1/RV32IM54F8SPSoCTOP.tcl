@@ -69,8 +69,6 @@ set_property parent.project_path D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.xpr 
 set_property XPM_LIBRARIES XPM_CDC [current_project]
 set_property default_lib xil_defaultlib [current_project]
 set_property target_language Verilog [current_project]
-set_property ip_repo_paths d:/sangmy/rv-rtos8/FPGA/vivado-library-master [current_project]
-update_ip_catalog
 set_property ip_output_repo d:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.cache/ip [current_project]
 set_property ip_cache_permissions {read write} [current_project]
 OPTRACE "Creating in-memory project" END { }
@@ -135,15 +133,15 @@ read_verilog -library xil_defaultlib {
   D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.srcs/sources_1/imports/modules/vga_ctrl.v
   D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.srcs/sources_1/imports/modules/54F8SP_SoC_TOP.v
 }
-read_ip -quiet D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.srcs/sources_1/ip/clk_wiz_0/clk_wiz_0.xci
-set_property used_in_implementation false [get_files -all d:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.gen/sources_1/ip/clk_wiz_0/clk_wiz_0_board.xdc]
-set_property used_in_implementation false [get_files -all d:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.gen/sources_1/ip/clk_wiz_0/clk_wiz_0.xdc]
-set_property used_in_implementation false [get_files -all d:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.gen/sources_1/ip/clk_wiz_0/clk_wiz_0_ooc.xdc]
-
 read_ip -quiet D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.srcs/sources_1/ip/rgb2dvi_0/rgb2dvi_0.xci
 set_property used_in_implementation false [get_files -all d:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.gen/sources_1/ip/rgb2dvi_0/src/rgb2dvi.xdc]
 set_property used_in_implementation false [get_files -all d:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.gen/sources_1/ip/rgb2dvi_0/src/rgb2dvi_ooc.xdc]
 set_property used_in_implementation false [get_files -all d:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.gen/sources_1/ip/rgb2dvi_0/src/rgb2dvi_clocks.xdc]
+
+read_ip -quiet D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.srcs/sources_1/ip/clk_wiz_0/clk_wiz_0.xci
+set_property used_in_implementation false [get_files -all d:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.gen/sources_1/ip/clk_wiz_0/clk_wiz_0_board.xdc]
+set_property used_in_implementation false [get_files -all d:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.gen/sources_1/ip/clk_wiz_0/clk_wiz_0.xdc]
+set_property used_in_implementation false [get_files -all d:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.gen/sources_1/ip/clk_wiz_0/clk_wiz_0_ooc.xdc]
 
 OPTRACE "Adding files" END { }
 # Mark all dcp files as not used in implementation to prevent them from being
@@ -157,6 +155,8 @@ foreach dcp [get_files -quiet -all -filter file_type=="Design\ Checkpoint"] {
 read_xdc D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.srcs/constrs_1/imports/new/gmc_keyboard_lab01.xdc
 set_property used_in_implementation false [get_files D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.srcs/constrs_1/imports/new/gmc_keyboard_lab01.xdc]
 
+read_xdc dont_touch.xdc
+set_property used_in_implementation false [get_files dont_touch.xdc]
 set_param ips.enableIPCacheLiteLoad 1
 
 read_checkpoint -auto_incremental -incremental D:/sangmy/rv-rtos8/FPGA/SoCs/RV32/Piveline.srcs/utils_1/imports/synth_1/top.dcp

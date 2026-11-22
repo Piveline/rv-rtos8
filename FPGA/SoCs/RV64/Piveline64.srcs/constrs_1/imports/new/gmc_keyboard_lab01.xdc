@@ -9,7 +9,8 @@
 ## 100 MHz System Clock
 ## --------------------------------------------------------------------------
 set_property -dict {PACKAGE_PIN R4 IOSTANDARD LVCMOS33} [get_ports CLK100MHZ]
-create_clock -period 10.000 -name sys_clk_pin -waveform {0.000 5.000} [get_ports CLK100MHZ]
+# [removed] clk_wiz_0 IP already defines the CLK100MHZ input clock (avoids Constraints 18-1055/18-1056)
+# create_clock -period 10.000 -name sys_clk_pin -waveform {0.000 5.000} [get_ports CLK100MHZ]
 
 ## --------------------------------------------------------------------------
 ## Reset Button (active-low)
@@ -61,8 +62,8 @@ set_property -dict {PACKAGE_PIN Y13 IOSTANDARD LVCMOS25} [get_ports {LED[7]}]
 ## --------------------------------------------------------------------------
 ## CDC False Path (pixel ↔ sys 클럭 도메인 간 동기화된 경로)
 ## --------------------------------------------------------------------------
-set_false_path -from [get_clocks -of_objects [get_pins pll_inst/clk_out1]] -to [get_clocks sys_clk_pin]
-set_false_path -from [get_clocks sys_clk_pin] -to [get_clocks -of_objects [get_pins pll_inst/clk_out1]]
+set_false_path -from [get_clocks -of_objects [get_pins pll_inst/clk_out1]] -to [get_clocks -of_objects [get_ports CLK100MHZ]]
+set_false_path -from [get_clocks -of_objects [get_ports CLK100MHZ]] -to [get_clocks -of_objects [get_pins pll_inst/clk_out1]]
 
 ## --------------------------------------------------------------------------
 ## Configuration

@@ -1,7 +1,0 @@
-+======================+======================+==============================================+
-| Launch Setup Clock   | Launch Hold Clock    | Pin                                          |
-+======================+======================+==============================================+
-| clk_out3_clk_wiz_0_1 | clk_out3_clk_wiz_0_1 | cpu/alu/multiplier_dword/prod_high_reg[61]/D |
-| clk_out3_clk_wiz_0_1 | clk_out3_clk_wiz_0_1 | cpu/alu/multiplier_dword/prod_high_reg[63]/D |
-| clk_out3_clk_wiz_0_1 | clk_out3_clk_wiz_0_1 | cpu/alu/multiplier_dword/prod_high_reg[62]/D |
-+----------------------+----------------------+----------------------------------------------+
