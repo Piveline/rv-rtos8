@@ -6,6 +6,7 @@ module CSRFile #(
 )(
     input clk,                            // clock signal
     input clk_enable,
+    input cycle_count_enable, // raw clock enable : mcycle keeps counting while the core is frozen
     input reset,                          // reset signal
     input trapped,
     input trapped_latch,
@@ -113,7 +114,6 @@ module CSRFile #(
             mscratch <= DEFAULT_mscratch;
             mepc    <= DEFAULT_mepc;
             mcause  <= DEFAULT_mcause;
-            mcycle  <= DEFAULT_mcycle;
             minstret <= DEFAULT_minstret;
             mie     <= DEFAULT_mie;
 
@@ -125,7 +125,6 @@ module CSRFile #(
             MPIE <= 1'b0;
         end 
         else if (clk_enable) begin
-            mcycle <= mcycle + 1;
             trapped_d <= trapped;
           
             if (instruction_retired) begin
@@ -170,5 +169,13 @@ module CSRFile #(
     end
 
 
+
+    // mcycle counts every clock, including cycles where the core is frozen by a cache miss
+    always @(posedge clk or posedge reset) begin
+        if (reset)
+            mcycle <= DEFAULT_mcycle;
+        else if (cycle_count_enable)
+            mcycle <= mcycle + 1;
+    end
 
 endmodule

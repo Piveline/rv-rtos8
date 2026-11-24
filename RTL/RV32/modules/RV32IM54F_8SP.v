@@ -79,6 +79,10 @@ module RV32IM54F8SP #(
     output wire data_cache_m_axi_rready
 );
 
+    // Data cache miss freezes the whole core (the cache itself keeps running on clk_enable).
+    wire data_cache_cpu_busy;
+    wire core_clk_enable = clk_enable && !data_cache_cpu_busy;
+
     // Program Counter and PC Plus 4
     wire [XLEN-1:0] pc;
     wire [XLEN-1:0] pc_plus_4_signal;
@@ -425,7 +429,7 @@ module RV32IM54F8SP #(
             EXR_store_data_hold       <= {XLEN{1'b0}};
             EXR_store_data_hold_valid <= 1'b0;
         end
-        else if (clk_enable) begin
+        else if (core_clk_enable) begin
             if (ID_EXR_flush || !EXR_is_store_instr) begin
                 EXR_store_data_hold_valid <= 1'b0;
             end
@@ -453,7 +457,7 @@ module RV32IM54F8SP #(
             EXR_srcA_hold_valid <= 1'b0;
             EXR_srcB_hold_valid <= 1'b0;
         end
-        else if (clk_enable) begin
+        else if (core_clk_enable) begin
             if (ID_EXR_flush || !ID_EXR_stall) begin
                 EXR_srcA_hold_valid <= 1'b0;
                 EXR_srcB_hold_valid <= 1'b0;
@@ -489,30 +493,22 @@ module RV32IM54F8SP #(
 
     // IO signals for MMIO Interface
     assign MMIO_data_memory_write_data = data_memory_write_data;
-    assign MMIO_data_memory_write_enable = MEM_memory_write;
+    assign MMIO_data_memory_write_enable = MEM_memory_write && core_clk_enable; // no repeated write while frozen
     assign MMIO_data_memory_address = MEM_alu_result;
 
     // DDR region (0x8000_0000 ~ 0x9FFF_FFFF) is served by the data cache
     wire mem_ddr_region = (MEM_alu_result[31:29] == 3'b100);
     wire data_memory_write_done;
 
-    localparam DATA_CACHE_IDLE = 2'd0; // no request in flight
-    localparam DATA_CACHE_WAIT = 2'd1; // request sent, waiting for cpu_ready
-    localparam DATA_CACHE_HOLD = 2'd2; // answered, MEM still stalled by something else (cpu_rdata is kept by the cache)
-    localparam DATA_CACHE_DRAIN = 2'd3; // MEM instruction was flushed, drop the answer
-
-    reg [1:0] data_cache_state;
-
-    wire data_cache_cpu_req_valid;
     wire [31:0] data_cache_cpu_rdata;
-    wire data_cache_cpu_ready;
+    wire data_cache_cpu_store_done;
 
     // MMIO Interface logics
     reg mmio_hit_reg;
     always @(posedge clk or posedge reset) begin
         if (reset)
             mmio_hit_reg <= 1'b0;
-        else if (clk_enable && !EX_MEM_stall)
+        else if (core_clk_enable && !EX_MEM_stall)
             mmio_hit_reg <= (EX2_alu_result[31:24] == 8'h02) ||
                             (EX2_alu_result[31:16] == 16'h1001) ||
                             (EX2_alu_result[31:16] == 16'h1002) ||
@@ -607,7 +603,7 @@ module RV32IM54F8SP #(
             jump_target_latch <= {XLEN{1'b0}};
             jumpped_latch <= 1'b0;
         end
-        else if (clk_enable) begin
+        else if (core_clk_enable) begin
             jump_target_latch <= EX2_jump ? EX2_alu_result : {XLEN{1'b0}};
             if (standby_mode && jumpped) begin
                 jumpped_latch <= 1'b1;
@@ -629,7 +625,7 @@ module RV32IM54F8SP #(
             trap_target_latch <= {XLEN{1'b0}};
             trapped_latch <= 1'b0;
         end
-        else if (clk_enable) begin
+        else if (core_clk_enable) begin
             trap_target_latch <= (trapped || goto_mtvec) ? trap_target : {XLEN{1'b0}};
             if (standby_mode && trapped) begin
                 trapped_latch <= 1'b1;
@@ -670,7 +666,7 @@ module RV32IM54F8SP #(
 
     ALU alu (
         .clk(clk),
-        .clk_enable(clk_enable),
+        .clk_enable(core_clk_enable),
         .reset(reset),
         .src_A(EX_src_A), 
         .src_B(EX_src_B), 
@@ -685,7 +681,7 @@ module RV32IM54F8SP #(
 
     ALUController alu_controller (
         .clk(clk),
-        .clk_enable(clk_enable),
+        .clk_enable(core_clk_enable),
         .reset(reset),
         .opcode(EX_opcode),             // from EXR_EX register
         .funct3(EX_funct3),
@@ -718,7 +714,7 @@ module RV32IM54F8SP #(
 
     BranchPredictor #(.XLEN(XLEN)) branch_predictor(
         .clk(clk),
-        .clk_enable(clk_enable),
+        .clk_enable(core_clk_enable),
         .reset(reset),
         .IF_opcode(IF_opcode),
         .IF_pc(IO_pc),
@@ -765,7 +761,8 @@ module RV32IM54F8SP #(
 
     CSRFile #(.XLEN(XLEN)) csr_file (
         .clk(clk),
-        .clk_enable(clk_enable),
+        .clk_enable(core_clk_enable),
+        .cycle_count_enable(clk_enable),
         .reset(reset),
         .trapped(trapped),
         .trapped_latch(trapped_latch),
@@ -793,7 +790,7 @@ module RV32IM54F8SP #(
 
     DataMemory data_memory (
         .clk(clk),
-        .clk_enable(clk_enable),
+        .clk_enable(core_clk_enable),
         .read_stall(EX_MEM_stall),
         .write_enable(MEM_memory_write && !mmio_hit_reg && !mem_ddr_region),
         .address(data_memory_address),
@@ -807,9 +804,10 @@ module RV32IM54F8SP #(
 
     // =========================================================================
     // Data Cache (DDR region 0x8000_0000 ~ 0x9FFF_FFFF)
-    // A load/store in MEM whose address is in the DDR region goes to the data
-    // cache instead of DataMemory. The request is sent once, and the whole
-    // pipeline is stalled through write_done until the cache answers.
+    // Same timing as DataMemory : the array is read with the EX2 address and the
+    // tag is compared in MEM, so a load hit does not stall and a store hit takes
+    // the usual 2-phase write_done. A miss raises cpu_busy, which freezes the core
+    // through core_clk_enable until the line is in.
     // =========================================================================
     wire data_cache_fence_i_done;
     wire data_cache_cpu_error; // AXI error on this request (trap hookup : core group)
@@ -825,56 +823,21 @@ module RV32IM54F8SP #(
         (MEM_funct3[1:0] == 2'b01) ? MEM_alu_result[0] : 1'b0;
     wire data_cache_access = (MEM_memory_read || MEM_memory_write) && mem_ddr_region && !mem_misaligned;
 
-    // send once, only for an instruction that is not being flushed
-    assign data_cache_cpu_req_valid = (data_cache_state == DATA_CACHE_IDLE) && data_cache_access && !MEM_WB_flush;
+    // only for an instruction that is not being flushed
+    wire data_cache_cpu_req_valid = data_cache_access && !MEM_WB_flush;
 
-    wire data_cache_busy = data_cache_cpu_req_valid ||
-        ((data_cache_state == DATA_CACHE_WAIT) && !data_cache_cpu_ready) ||
-        ((data_cache_state == DATA_CACHE_DRAIN) && data_cache_access);
+    // MEM register takes a new instruction at this edge (the cache reads the EX2 address)
+    wire data_cache_mem_advance = core_clk_enable && (!EX_MEM_stall || EX_MEM_flush);
 
-    // stall the pipeline while DataMemory or the data cache is busy
-    assign write_done = data_memory_write_done && !data_cache_busy;
-
-    always @(posedge clk or posedge reset) begin
-        if (reset) begin
-            data_cache_state <= DATA_CACHE_IDLE;
-        end
-        else if (clk_enable) begin
-            case (data_cache_state)
-                DATA_CACHE_IDLE: begin
-                    if (data_cache_cpu_req_valid)
-                        data_cache_state <= DATA_CACHE_WAIT;
-                end
-                DATA_CACHE_WAIT: begin
-                    if (data_cache_cpu_ready) begin
-                        // answer is used this cycle; wait in HOLD if MEM cannot move yet
-                        if (!EX_MEM_stall || EX_MEM_flush || MEM_WB_flush)
-                            data_cache_state <= DATA_CACHE_IDLE;
-                        else
-                            data_cache_state <= DATA_CACHE_HOLD;
-                    end
-                    else if (!EX_MEM_stall || EX_MEM_flush || MEM_WB_flush) begin
-                        // MEM instruction left before the answer (trap flush or standby)
-                        data_cache_state <= DATA_CACHE_DRAIN;
-                    end
-                end
-                DATA_CACHE_HOLD: begin
-                    if (!EX_MEM_stall || EX_MEM_flush || MEM_WB_flush)
-                        data_cache_state <= DATA_CACHE_IDLE;
-                end
-                DATA_CACHE_DRAIN: begin
-                    if (data_cache_cpu_ready)
-                        data_cache_state <= DATA_CACHE_IDLE;
-                end
-                default: data_cache_state <= DATA_CACHE_IDLE;
-            endcase
-        end
-    end
+    // store hit uses the same 2-phase write_done as DataMemory; misses freeze the core instead
+    assign write_done = data_memory_write_done && data_cache_cpu_store_done;
 
     DataCache data_cache (
         .clk(clk),
         .reset(reset),
         .clk_enable(clk_enable),
+        .mem_advance(data_cache_mem_advance),
+        .lookup_address(EX2_alu_result),
         .cpu_req_valid(data_cache_cpu_req_valid),
         .cpu_req_we(MEM_memory_write),
         .cpu_req_addr(MEM_alu_result),
@@ -893,7 +856,8 @@ module RV32IM54F8SP #(
         .m_axi_rlast(data_cache_m_axi_rlast),
         .m_axi_rvalid(data_cache_m_axi_rvalid),
         .cpu_rdata(data_cache_cpu_rdata),
-        .cpu_ready(data_cache_cpu_ready),
+        .cpu_busy(data_cache_cpu_busy),
+        .cpu_store_done(data_cache_cpu_store_done),
         .cpu_error(data_cache_cpu_error),
         .fence_i_done(data_cache_fence_i_done),
         .inval_done(data_cache_inval_done),
@@ -922,7 +886,7 @@ module RV32IM54F8SP #(
 
     ExceptionDetector exception_detector (
         .clk(clk),
-        .clk_enable(clk_enable),
+        .clk_enable(core_clk_enable),
         .reset(reset),
         .ID_opcode(opcode),
         .ID_funct3(funct3),
@@ -958,7 +922,7 @@ module RV32IM54F8SP #(
 
     ForwardUnit forward_unit (
         .clk(clk),
-        .clk_enable(clk_enable),
+        .clk_enable(core_clk_enable),
         .EX_MEM_stall(EX_MEM_stall),
         .EX_MEM_flush(EX_MEM_flush),
 
@@ -1122,7 +1086,7 @@ module RV32IM54F8SP #(
 
     InstructionMemory instruction_memory (
         .clk(clk),
-        .clk_enable(clk_enable),
+        .clk_enable(core_clk_enable),
         .pc_stall(pc_stall),
         .read_stall(EX_MEM_stall),
         .pc(pc),
@@ -1133,7 +1097,7 @@ module RV32IM54F8SP #(
 
     ProgramCounter program_counter (
         .clk(clk),
-        .clk_enable(clk_enable),
+        .clk_enable(core_clk_enable),
         .reset(reset),
         .next_pc(next_pc),
         .pc(pc)
@@ -1160,7 +1124,7 @@ module RV32IM54F8SP #(
 
     RegisterFile register_file (
         .clk(clk),
-        .clk_enable(clk_enable),
+        .clk_enable(core_clk_enable),
         .read_reg1(rs1),
         .read_reg2(rs2),
         .write_reg(WB_rd),
@@ -1173,7 +1137,7 @@ module RV32IM54F8SP #(
 
     TrapController #(.XLEN(XLEN)) trap_controller (
         .clk(clk),
-        .clk_enable(clk_enable),
+        .clk_enable(core_clk_enable),
         .reset(reset),
         .EX_jump(EX_jump),
         .jump(EX2_jump),
@@ -1214,7 +1178,7 @@ module RV32IM54F8SP #(
 
     IF_IO_Register #(.XLEN(XLEN)) if_io_register (
         .clk(clk),
-        .clk_enable(clk_enable),
+        .clk_enable(core_clk_enable),
         .flush(IF_IO_flush),
         .IF_IO_stall(IF_IO_stall),
         .branch_estimation(branch_estimation),
@@ -1240,7 +1204,7 @@ module RV32IM54F8SP #(
 
     IO_ID_Register #(.XLEN(XLEN)) io_id_register (
         .clk(clk),
-        .clk_enable(clk_enable),
+        .clk_enable(core_clk_enable),
         .flush(IO_ID_flush),
         .IO_ID_stall(IO_ID_stall),
 
@@ -1260,7 +1224,7 @@ module RV32IM54F8SP #(
     // ID - EXR pipeline register (was ID_EX, outputs renamed to EXR_)
     ID_EX_Register #(.XLEN(XLEN)) id_exr_register (
         .clk(clk),
-        .clk_enable(clk_enable),
+        .clk_enable(core_clk_enable),
         .flush(ID_EXR_flush),             // CHANGED
         .ID_EX_stall(ID_EXR_stall),      // CHANGED
         
@@ -1320,7 +1284,7 @@ module RV32IM54F8SP #(
     // EXR - EX pipeline register (NEW)
     EXR_EX_Register #(.XLEN(XLEN)) exr_ex_register (
         .clk(clk),
-        .clk_enable(clk_enable),
+        .clk_enable(core_clk_enable),
         .flush(EXR_EX_flush),
         .EXR_EX_stall(EXR_EX_stall),
 
@@ -1384,7 +1348,7 @@ module RV32IM54F8SP #(
     // EX - EX2/BR pipeline register (inputs now from EXR_EX register outputs)
     EX_EX2_Register #(.XLEN(XLEN)) ex_ex2_register (
         .clk(clk),
-        .clk_enable(clk_enable),
+        .clk_enable(core_clk_enable),
         .flush(EX_EX2_flush),
         .EX_EX2_stall(EX_EX2_stall),
 
@@ -1458,7 +1422,7 @@ module RV32IM54F8SP #(
 
     EX_MEM_Register #(.XLEN(XLEN)) ex_mem_register (
         .clk(clk),
-        .clk_enable(clk_enable),
+        .clk_enable(core_clk_enable),
         .flush(EX_MEM_flush),
         .EX_MEM_stall(EX_MEM_stall),
 
@@ -1505,7 +1469,7 @@ module RV32IM54F8SP #(
 
     MEM_WB_Register #(.XLEN(XLEN)) mem_wb_register (
         .clk(clk),
-        .clk_enable(clk_enable),
+        .clk_enable(core_clk_enable),
         .MEM_WB_stall(MEM_WB_stall),
         .flush(MEM_WB_flush),
 
@@ -1554,7 +1518,7 @@ module RV32IM54F8SP #(
         if (reset) begin
             instruction_pc <= {XLEN{1'b0}};
         end
-        else if (clk_enable && !pc_stall) begin
+        else if (core_clk_enable && !pc_stall) begin
             instruction_pc <= pc;
         end
     end
@@ -1571,7 +1535,7 @@ module RV32IM54F8SP #(
             retire_byte_enable_logic_register_file_write_data <= {XLEN{1'b0}};
             instruction_retired <= 1'b0;
         end 
-        else if (clk_enable) begin
+        else if (core_clk_enable) begin
             retire_rd <= WB_rd;
             retire_register_write_enable <= WB_register_write_enable;
             retire_opcode <= WB_opcode;
