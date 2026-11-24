@@ -6,6 +6,7 @@
 
 module ControlUnit (
 	input write_done,	// signal indicating if write is done
+	input cache_stall,	// data cache miss in progress
 	input trap_done,	// signal indicating if Pre-Trap Handling is done
 	input csr_ready,
 	input IF_IO_stall,
@@ -25,7 +26,7 @@ module ControlUnit (
 );
 
     always @(*) begin
-		pc_stall = (!write_done || !trap_done || !csr_ready || IF_IO_stall);
+		pc_stall = (!write_done || cache_stall || !trap_done || !csr_ready || IF_IO_stall);
         jump = 1'b0;
         branch = 1'b0;
         alu_src_A_select = `ALU_SRC_A_NONE;

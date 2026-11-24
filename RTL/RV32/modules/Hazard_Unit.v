@@ -12,6 +12,7 @@ module HazardUnit (
     input wire mul_start,
     input wire mul_busy,
     input wire write_done,
+    input wire cache_stall,     // data cache miss in progress (stalls like !write_done)
     input wire [2:0] trap_status,
     input wire misaligned_instruction_flush,
     input wire misaligned_memory_flush,
@@ -146,6 +147,9 @@ module HazardUnit (
         EX_csr_write_enable || MEM_csr_write_enable || WB_csr_write_enable
     );
 
+    // memory stage is ready : DataMemory write finished and no data cache miss
+    wire memory_ready = write_done && !cache_stall;
+
     always @(*) begin
         hazard_ex  = 2'b00;
         hazard_ex2 = 2'b00;
@@ -196,11 +200,11 @@ module HazardUnit (
             ID_EXR_flush = 1'b1;
             EXR_EX_flush = 1'b1;    // NEW: extra stage to flush
             if (branch_prediction_miss) begin
-                if (write_done && csr_ready && !div_start && !div_busy && !mul_start && !mul_busy) begin
+                if (memory_ready && csr_ready && !div_start && !div_busy && !mul_start && !mul_busy) begin
                     EX_EX2_flush = 1'b1;
                 end
             end
-            else if (EX2_jump && !pth_done_flush && write_done) begin
+            else if (EX2_jump && !pth_done_flush && memory_ready) begin
                 EX_EX2_flush = 1'b1;
             end
         end
@@ -251,9 +255,20 @@ module HazardUnit (
             EX_MEM_stall = 1'b1;
             MEM_WB_stall = 1'b1;
         end
+        else if (cache_stall) begin
+            // data cache miss : hold IF ~ MEM, let the WB instruction finish once and
+            // feed a bubble into WB so nothing is written back twice
+            IF_IO_stall  = 1'b1;
+            IO_ID_stall  = 1'b1;
+            ID_EXR_stall = 1'b1;
+            EXR_EX_stall = 1'b1;
+            EX_EX2_stall = 1'b1;
+            EX_MEM_stall = 1'b1;
+            MEM_WB_flush = 1'b1;
+        end
 
         if (exr_data_stall && trap_done && csr_ready && !standby_mode &&
-            !div_start && !div_busy && !mul_start && !mul_busy && write_done && !branch_prediction_miss && !EX2_jump) begin
+            !div_start && !div_busy && !mul_start && !mul_busy && memory_ready && !branch_prediction_miss && !EX2_jump) begin
             IF_IO_stall  = 1'b1;
             IO_ID_stall  = 1'b1;
             ID_EXR_stall = 1'b1;
@@ -261,7 +276,7 @@ module HazardUnit (
         end
 
         if (csr_data_hazard && trap_done && csr_ready && !standby_mode &&
-            !div_start && !div_busy && !mul_start && !mul_busy && write_done && !EX2_jump) begin
+            !div_start && !div_busy && !mul_start && !mul_busy && memory_ready && !EX2_jump) begin
             IF_IO_stall  = 1'b1;
             IO_ID_stall  = 1'b1;
             ID_EXR_stall = 1'b1;
