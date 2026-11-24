@@ -20,8 +20,8 @@
  *   MEM : tag compare; a load hit returns cpu_rdata in the same cycle (no stall)
  *         a store hit writes the array in its first MEM cycle and reports
  *         cpu_store_done in the second (same 2-phase store as the old data memory)
- *   miss : cpu_busy = 1 until the line is in; the core freezes on cpu_busy
- *          (core_clk_enable), then the line is read again (RELOOKUP) and the
+ *   miss : cpu_busy = 1 until the line is in; the core stalls on cpu_busy
+ *          (HazardUnit / ControlUnit cache_stall), then the line is read again (RELOOKUP) and the
  *          access finishes as a hit
  */
 module DataCache #(
@@ -62,7 +62,7 @@ module DataCache #(
     // ==================== OUTPUTS ====================
     // D-Cache -> CPU Core
     output wire [31:0] cpu_rdata, // aligned word for the MEM access (byte extract / sign-ext in core)
-    output wire cpu_busy, // 1 : the MEM access is not finished, freeze the core
+    output wire cpu_busy, // 1 : the MEM access is not finished, stall the pipeline
     output wire cpu_store_done, // 0 : first cycle of a store (2-phase store, same as the old data memory)
     output wire cpu_error, // the MEM access ended with an AXI error, cpu_rdata is not valid
 
