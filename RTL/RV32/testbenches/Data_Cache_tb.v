@@ -27,7 +27,11 @@ module DataCache_tb;
     reg [31:0] cpu_req_wdata;
     reg [3:0] cpu_req_wstrb;
     wire [31:0] cpu_rdata;
-    wire cpu_ready;
+    reg mem_advance;
+    reg [31:0] lookup_address;
+    wire cpu_busy;
+    wire cpu_store_done;
+    wire cpu_error;
     reg fence_i_req;
     wire fence_i_done;
     reg inval_req;
@@ -72,13 +76,17 @@ module DataCache_tb;
         .clk(clk),
         .reset(reset),
         .clk_enable(clk_enable),
+        .mem_advance(mem_advance),
+        .lookup_address(lookup_address),
         .cpu_req_valid(cpu_req_valid),
         .cpu_req_we(cpu_req_we),
         .cpu_req_addr(cpu_req_addr),
         .cpu_req_wdata(cpu_req_wdata),
         .cpu_req_wstrb(cpu_req_wstrb),
         .cpu_rdata(cpu_rdata),
-        .cpu_ready(cpu_ready),
+        .cpu_busy(cpu_busy),
+        .cpu_store_done(cpu_store_done),
+        .cpu_error(cpu_error),
         .fence_i_req(fence_i_req),
         .fence_i_done(fence_i_done),
         .inval_req(inval_req),
@@ -321,40 +329,45 @@ module DataCache_tb;
         mk_addr = 32'h8000_0000 | (tag << (5 + IB)) | (set << 5) | off;
     endfunction
 
-    task wait_ready;
+    // One access the way the pipeline drives it :
+    //   EX2 : lookup_address + mem_advance (the array is read at this edge)
+    //   MEM : cpu_req_* held until cpu_busy = 0 and cpu_store_done = 1, data sampled then
+    //   leave MEM : mem_advance with the request still valid (access is counted here)
+    task do_req(input we, input [31:0] addr, input [31:0] wdata, input [3:0] wstrb, output [31:0] rdata);
         integer tout;
         begin
-            tout = 0;
-            while (!cpu_ready && tout < 2000) begin
-                @(negedge clk);
-                tout = tout + 1;
-            end
-            if (tout >= 2000) begin
-                $display("[FAIL-TIMEOUT] cpu_ready never asserted (addr %h)", cpu_req_addr);
-                fail_count = fail_count + 1;
-                $finish;
-            end
-        end
-    endtask
-
-    task do_req(input we, input [31:0] addr, input [31:0] wdata, input [3:0] wstrb, output [31:0] rdata);
-        begin
             @(negedge clk);
+            lookup_address = addr;
+            mem_advance = 1'b1;
+            @(negedge clk);
+            mem_advance = 1'b0;
             cpu_req_valid = 1'b1;
             cpu_req_we = we;
             cpu_req_addr = addr;
             cpu_req_wdata = wdata;
             cpu_req_wstrb = wstrb;
-            @(negedge clk);
-            wait_ready;
-            rdata = cpu_rdata;
-            cpu_req_valid = 1'b0;
-            cpu_req_we = 1'b0;
-            @(negedge clk);
-            if (cpu_ready) begin
-                $display("[FAIL-PROTOCOL] cpu_ready longer than 1 cycle (addr %h)", addr);
+            #1;
+            tout = 0;
+            while ((cpu_busy || !cpu_store_done) && tout < 2000) begin
+                @(negedge clk);
+                #1;
+                tout = tout + 1;
+            end
+            if (tout >= 2000) begin
+                $display("[FAIL-TIMEOUT] access never finished (addr %h)", addr);
+                fail_count = fail_count + 1;
+                $finish;
+            end
+            if (cpu_error) begin
+                $display("[FAIL-PROTOCOL] unexpected cpu_error (addr %h)", addr);
                 fail_count = fail_count + 1;
             end
+            rdata = cpu_rdata;
+            mem_advance = 1'b1;
+            @(negedge clk);
+            mem_advance = 1'b0;
+            cpu_req_valid = 1'b0;
+            cpu_req_we = 1'b0;
         end
     endtask
 
@@ -451,6 +464,8 @@ module DataCache_tb;
         reset = 1;
         clk_enable = 1;
         cpu_req_valid = 0;
+        mem_advance = 0;
+        lookup_address = 0;
         cpu_req_we = 0;
         cpu_req_addr = 0;
         cpu_req_wdata = 0;
