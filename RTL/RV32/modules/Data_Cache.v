@@ -6,6 +6,12 @@
  * - AXI4 Bus Master Interface (64-bit data, INCR burst x 4 beat)
  * - FENCE.I : CLEAN (dirty write-back, valid kept)
  * - INVAL : write-back + invalidate all (MMIO cold flush)
+ * - AXI error handling
+ *   RRESP error on refill : line is not kept (valid=0), request ends with cpu_error
+ *   BRESP error on victim write-back : refill is aborted, victim stays dirty, cpu_error
+ *   BRESP error on FENCE.I / INVAL write-back : line stays dirty and valid, scan_error
+ *   Refill ends on the 4th beat or on RLAST, whichever comes first;
+ *   RLAST on the wrong beat is an error (the core never waits forever on a missing RLAST)
  * - Interface style follows the instruction cache (feat/icache)
  */
 module DataCache #(
@@ -45,10 +51,12 @@ module DataCache #(
     // D-Cache -> CPU Core
     output reg [31:0] cpu_rdata, // aligned word (byte extract / sign-ext in core)
     output reg cpu_ready, // 1-cycle pulse : request done
+    output reg cpu_error, // with cpu_ready : AXI error response, cpu_rdata is not valid
 
     // Control
     output reg fence_i_done, // 1-cycle pulse after last BRESP
     output reg inval_done, // 1-cycle pulse
+    output reg scan_error, // with fence_i_done / inval_done : a write-back got an error response
 
     // Performance counters
     output reg [31:0] perf_access,
@@ -152,6 +160,14 @@ module DataCache #(
     reg scan_inval;
 
     reg [1:0] burst_cnt;
+    reg refill_error; // error response or RLAST on the wrong beat seen during this refill
+    reg scan_error_seen; // a FENCE.I / INVAL write-back got an error response
+
+    // AXI response : SLVERR (10) and DECERR (11) are errors
+    wire refill_beat = (state == STATE_ALLOC_R) && m_axi_rvalid && m_axi_rready;
+    wire refill_last_beat = m_axi_rlast || (burst_cnt == 2'd3);
+    wire refill_beat_error = m_axi_rresp[1] || (m_axi_rlast != (burst_cnt == 2'd3));
+    wire refill_failed = refill_error || refill_beat_error;
 
     // Synchronous BRAM Read (1-cycle latency)
     reg [63:0] read_data_w0, read_data_w1;
@@ -238,7 +254,7 @@ module DataCache #(
     end
 
     // Tag RAM write port (end of refill)
-    wire tag_we = !reset && clk_enable && (state == STATE_ALLOC_R) && m_axi_rvalid && m_axi_rready && m_axi_rlast;
+    wire tag_we = !reset && clk_enable && refill_beat && refill_last_beat;
 
     always @(posedge clk) begin
         if (tag_we && latched_target_way == 1'b0) tag_ram_w0[a_idx] <= a_tag;
@@ -251,9 +267,13 @@ module DataCache #(
         if (reset) begin
             state <= STATE_IDLE;
             cpu_ready <= 1'b0;
+            cpu_error <= 1'b0;
             cpu_rdata <= 32'h0;
             fence_i_done <= 1'b0;
             inval_done <= 1'b0;
+            scan_error <= 1'b0;
+            refill_error <= 1'b0;
+            scan_error_seen <= 1'b0;
             m_axi_arvalid <= 1'b0;
             m_axi_araddr <= 32'h0;
             m_axi_awvalid <= 1'b0;
@@ -300,12 +320,14 @@ module DataCache #(
             case (state)
                 STATE_IDLE: begin
                     cpu_ready <= 1'b0;
+                    cpu_error <= 1'b0;
 
                     if (fence_i_req || inval_req) begin
                         // In-flight request is already finished (only checked in IDLE)
                         scan_set <= {INDEX_BITS{1'b0}};
                         scan_way <= 1'b0;
                         scan_inval <= inval_req;
+                        scan_error_seen <= 1'b0;
                         state <= STATE_SCAN;
                     end
                     else if (cpu_req_valid) begin
@@ -400,24 +422,36 @@ module DataCache #(
 
                 STATE_WB_B: begin
                     if (m_axi_bvalid) begin
-                        if (!perf_clear) perf_wb <= perf_wb + 32'd1;
-                        if (wb_way) dirty_w1[wb_idx] <= 1'b0;
-                        else dirty_w0[wb_idx] <= 1'b0;
+                        if (!m_axi_bresp[1]) begin
+                            // write-back accepted : the line is clean now
+                            if (!perf_clear) perf_wb <= perf_wb + 32'd1;
+                            if (wb_way) dirty_w1[wb_idx] <= 1'b0;
+                            else dirty_w0[wb_idx] <= 1'b0;
+                        end
 
                         if (wb_from_scan) begin
-                            if (scan_inval) begin
+                            // on an error the line stays dirty and valid (data is not lost)
+                            if (m_axi_bresp[1])
+                                scan_error_seen <= 1'b1;
+                            else if (scan_inval) begin
                                 if (scan_way) valid_w1[scan_set] <= 1'b0;
                                 else valid_w0[scan_set] <= 1'b0;
                             end
                             if (scan_last) begin
                                 if (scan_inval) inval_done <= 1'b1;
                                 else fence_i_done <= 1'b1;
+                                scan_error <= scan_error_seen || m_axi_bresp[1];
                                 state <= STATE_SCAN_WAIT;
                             end else begin
                                 if (scan_way) scan_set <= scan_set + 1'b1;
                                 scan_way <= ~scan_way;
                                 state <= STATE_SCAN;
                             end
+                        end else if (m_axi_bresp[1]) begin
+                            // victim could not be written back : keep it and give up this request
+                            cpu_error <= 1'b1;
+                            cpu_ready <= 1'b1;
+                            state <= STATE_IDLE;
                         end else begin
                             m_axi_arvalid <= 1'b1;
                             m_axi_araddr <= {latched_addr[31:5], 5'b00000};
@@ -431,28 +465,42 @@ module DataCache #(
                     if (m_axi_arready && m_axi_arvalid) begin
                         m_axi_arvalid <= 1'b0;
                         burst_cnt <= 2'b0;
+                        refill_error <= 1'b0;
                         state <= STATE_ALLOC_R;
                     end
                 end
 
                 STATE_ALLOC_R: begin
-                    if (m_axi_rvalid && m_axi_rready) begin
+                    if (refill_beat) begin
                         // each beat is written by the data RAM write port below
                         if (burst_cnt == a_offset[4:3]) latched_axi_data <= m_axi_rdata;
                         burst_cnt <= burst_cnt + 2'd1;
+                        if (refill_beat_error) refill_error <= 1'b1;
 
-                        if (m_axi_rlast) begin
+                        if (refill_last_beat) begin
                             // tag is written by the tag RAM write port below
-                            if (latched_target_way == 1'b0) begin
-                                valid_w0[a_idx] <= 1'b1;
-                                dirty_w0[a_idx] <= latched_we;
+                            if (refill_failed) begin
+                                // broken line : do not keep it (the victim was already clean)
+                                if (latched_target_way == 1'b0) begin
+                                    valid_w0[a_idx] <= 1'b0;
+                                    dirty_w0[a_idx] <= 1'b0;
+                                end else begin
+                                    valid_w1[a_idx] <= 1'b0;
+                                    dirty_w1[a_idx] <= 1'b0;
+                                end
+                                cpu_error <= 1'b1;
                             end else begin
-                                valid_w1[a_idx] <= 1'b1;
-                                dirty_w1[a_idx] <= latched_we;
+                                if (latched_target_way == 1'b0) begin
+                                    valid_w0[a_idx] <= 1'b1;
+                                    dirty_w0[a_idx] <= latched_we;
+                                end else begin
+                                    valid_w1[a_idx] <= 1'b1;
+                                    dirty_w1[a_idx] <= latched_we;
+                                end
+                                lru_bit[a_idx] <= ~latched_target_way;
+                                if (!latched_we)
+                                    cpu_rdata <= a_offset[2] ? current_extracted_data[63:32] : current_extracted_data[31:0];
                             end
-                            lru_bit[a_idx] <= ~latched_target_way;
-                            if (!latched_we)
-                                cpu_rdata <= a_offset[2] ? current_extracted_data[63:32] : current_extracted_data[31:0];
                             cpu_ready <= 1'b1;
                             state <= STATE_IDLE;
                         end
@@ -470,6 +518,7 @@ module DataCache #(
                 STATE_BYPASS_R: begin
                     if (m_axi_rvalid && m_axi_rready) begin
                         cpu_rdata <= a_offset[2] ? m_axi_rdata[63:32] : m_axi_rdata[31:0];
+                        cpu_error <= m_axi_rresp[1] || !m_axi_rlast;
                         cpu_ready <= 1'b1;
                         state <= STATE_IDLE;
                     end
@@ -492,6 +541,7 @@ module DataCache #(
 
                 STATE_BYPASS_B: begin
                     if (m_axi_bvalid) begin
+                        cpu_error <= m_axi_bresp[1];
                         cpu_ready <= 1'b1;
                         state <= STATE_IDLE;
                     end
@@ -514,6 +564,7 @@ module DataCache #(
                         if (scan_last) begin
                             if (scan_inval) inval_done <= 1'b1;
                             else fence_i_done <= 1'b1;
+                            scan_error <= scan_error_seen;
                             state <= STATE_SCAN_WAIT;
                         end else begin
                             if (scan_way) scan_set <= scan_set + 1'b1;
@@ -526,6 +577,7 @@ module DataCache #(
                     // done was a 1-cycle pulse; wait until the requester drops req
                     fence_i_done <= 1'b0;
                     inval_done <= 1'b0;
+                    scan_error <= 1'b0;
                     wb_from_scan <= 1'b0;
                     if (!fence_i_req && !inval_req) state <= STATE_IDLE;
                 end

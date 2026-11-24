@@ -812,6 +812,8 @@ module RV32IM54F8SP #(
     // pipeline is stalled through write_done until the cache answers.
     // =========================================================================
     wire data_cache_fence_i_done;
+    wire data_cache_cpu_error; // AXI error on this request (trap hookup : core group)
+    wire data_cache_scan_error;
     wire data_cache_inval_done;
     wire [31:0] data_cache_perf_access;
     wire [31:0] data_cache_perf_miss;
@@ -892,8 +894,10 @@ module RV32IM54F8SP #(
         .m_axi_rvalid(data_cache_m_axi_rvalid),
         .cpu_rdata(data_cache_cpu_rdata),
         .cpu_ready(data_cache_cpu_ready),
+        .cpu_error(data_cache_cpu_error),
         .fence_i_done(data_cache_fence_i_done),
         .inval_done(data_cache_inval_done),
+        .scan_error(data_cache_scan_error),
         .perf_access(data_cache_perf_access),
         .perf_miss(data_cache_perf_miss),
         .perf_wb(data_cache_perf_wb),
