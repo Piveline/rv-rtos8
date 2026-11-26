@@ -92,6 +92,12 @@ module RV32IM54F_8SP_data_cache_tb;
         .data_cache_m_axi_rresp(m_axi_rresp),
         .data_cache_m_axi_rlast(m_axi_rlast),
         .data_cache_m_axi_rvalid(m_axi_rvalid),
+        // instruction cache AXI4 master: the programs run from the Boot ROM (not cached)
+        .instruction_cache_m_axi_arready(1'b0),
+        .instruction_cache_m_axi_rdata(64'h0),
+        .instruction_cache_m_axi_rresp(2'b00),
+        .instruction_cache_m_axi_rlast(1'b0),
+        .instruction_cache_m_axi_rvalid(1'b0),
         .retire_instruction(retire_instruction),
         .MMIO_data_memory_write_data(MMIO_data_memory_write_data),
         .MMIO_data_memory_address(MMIO_data_memory_address),

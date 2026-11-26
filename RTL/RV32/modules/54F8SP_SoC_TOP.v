@@ -169,18 +169,31 @@ module RV32IM54F8SPSoCTOP #(
     wire            timer_interrupt;
     wire [XLEN-1:0] mmio_read_data;
  
-    RV32IM54F8SP #(.XLEN(XLEN)) cpu (
-        .clk                        (sys_clk),
-        .clk_enable                 (cpu_clk_enable),
-        .reset                      (sys_reset),
-        .UART_busy                  (tx_busy),
-        .timer_interrupt_pending    (timer_interrupt),
-        .MMIO_read_data             (mmio_read_data),
- 
-        .retire_instruction             (retire_instruction),
-        .MMIO_data_memory_write_data    (cpu_mmio_write_data),
-        .MMIO_data_memory_address       (cpu_mmio_address),
-        .MMIO_data_memory_write_enable  (cpu_mmio_write_enable)
+    // DDR (MIG) is not connected yet: the firmware runs from the Boot ROM, which is not cached,
+    // so the instruction cache AXI master stays idle. Its inputs are tied off until the memory group's DDR is in.
+    RV32IM54F8SP #(.XLEN(XLEN), .ICACHE_NUM_SETS(512)) cpu (
+        .clk(sys_clk),
+        .clk_enable(cpu_clk_enable),
+        .reset(sys_reset),
+        .UART_busy(tx_busy),
+        .timer_interrupt_pending(timer_interrupt),
+        .MMIO_read_data(mmio_read_data),
+        .instruction_cache_m_axi_arready(1'b0),
+        .instruction_cache_m_axi_rdata(64'h0),
+        .instruction_cache_m_axi_rresp(2'b00),
+        .instruction_cache_m_axi_rlast(1'b0),
+        .instruction_cache_m_axi_rvalid(1'b0),
+        .instruction_cache_m_axi_araddr(),
+        .instruction_cache_m_axi_arlen(),
+        .instruction_cache_m_axi_arsize(),
+        .instruction_cache_m_axi_arburst(),
+        .instruction_cache_m_axi_arvalid(),
+        .instruction_cache_m_axi_rready(),
+
+        .retire_instruction(retire_instruction),
+        .MMIO_data_memory_write_data(cpu_mmio_write_data),
+        .MMIO_data_memory_address(cpu_mmio_address),
+        .MMIO_data_memory_write_enable(cpu_mmio_write_enable)
     );
  
     // ========================================================================

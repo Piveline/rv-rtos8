@@ -41,7 +41,8 @@ module TrapController #(
     output reg mret_executed,
     output reg pth_read,
     output reg goto_mtvec,
-    output reg mret_done
+    output reg mret_done,
+    output wire trap_idle               // no trap sequence in progress (registered state, no combinational path)
 );
 
 localparam IDLE             = 4'b0000;
@@ -61,6 +62,7 @@ localparam GOTO_MRET       = 4'b1101;
 localparam IRQ_MEPC_WRITE   = 4'b1110;
 
 reg [3:0] trap_handle_state;
+assign trap_idle = (trap_handle_state == IDLE);
 reg [3:0] next_trap_handle_state;
 
 reg debug_mode_reg;

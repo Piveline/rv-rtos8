@@ -1,1180 +1,1144 @@
 `timescale 1ns / 1ps
 
+`include "./modules/Instruction_Cache.v"
+`include "./modules/Dummy_DDR_Memory.v"
+
+/*
+ * Instruction Cache testbench
+ * - The TB drives the cache the way the core does: lookup_address is read on fetch_advance,
+ *   cpu_req_addr / cpu_req_valid describe the fetch at the output, and the "core" moves on
+ *   only on an edge with clk_enable = 1 and cpu_busy = 0
+ * - Every fetch is checked against the memory (cpu_rdata, cpu_error) and against a reference
+ *   model of the cache: hit = no AXI burst, miss = one burst, LRU victim, FENCE.I invalidation
+ * - AXI slave : TB model (random latency, error injection, gated by clk_enable or not)
+ *   or DummyDDRMemory (fixed latency, SLVERR window at 0x8001_F000)
+ * - Run from RTL/RV32:
+ *   iverilog -PInstructionCache_tb.NUM_SETS=16 -o ic.vvp testbenches/Instruction_Cache_tb.v
+ *   vvp -n ic.vvp
+ */
 module InstructionCache_tb;
+	parameter NUM_SETS = 512;
+	parameter CACHE_EN = 1;
+	parameter RANDOM_FETCHES = 20000; // per random phase
+
+	localparam INDEX_BITS = $clog2(NUM_SETS);
+	localparam WAY_BYTES = NUM_SETS * 32;
+	localparam DDR_WORDS = 16384; // 64-bit words : 128KB window at 0x8000_0000
+	localparam [31:0] NOP = 32'h0000_0013;
+	localparam DUMMY_READ_LATENCY = 6;
+	localparam [31:0] DUMMY_ERROR_ADDRESS = 32'h8001_F000;
+	localparam STREAM_SIZE = 65536;
 
 	reg clk;
 	reg reset;
 	reg clk_enable;
 
+	initial clk = 1'b0;
 	always #5 clk = ~clk;
 
-	reg cpu_req_valid;
-	reg [31:0] cpu_req_addr;
-	reg cpu_flush;
-	wire [31:0] cpu_rdata;
-	wire cpu_ready;
-	reg fence_i_req;
-	wire fence_i_done;
+	// ------------------------------------------------------------------------
+	// Core side
+	// ------------------------------------------------------------------------
+	reg [31:0] stream [0:STREAM_SIZE-1]; // fetch addresses, in order
+	integer stream_len;
+	integer stream_pos;
+	reg stall; // pc_stall of the core
+	reg [31:0] fetch_pc; // cpu_req_addr (instruction_pc of the core)
+	reg issued; // cpu_req_valid
+	reg fence_req;
+	reg perf_clear;
 
+	wire [31:0] cpu_rdata;
+	wire cpu_busy;
+	wire cpu_error;
+	wire fence_i_done;
+	wire [31:0] perf_access;
+	wire [31:0] perf_miss;
+	wire [31:0] perf_stall;
+
+	wire [31:0] lookup_address = stream[stream_pos];
+	wire fetch_advance = clk_enable && !cpu_busy && !stall && !reset && (stream_pos < stream_len);
+
+	// ------------------------------------------------------------------------
+	// AXI
+	// ------------------------------------------------------------------------
 	wire [31:0] m_axi_araddr;
 	wire [7:0] m_axi_arlen;
 	wire [2:0] m_axi_arsize;
 	wire [1:0] m_axi_arburst;
 	wire m_axi_arvalid;
-	reg m_axi_arready;
-
-	reg [63:0] m_axi_rdata;
-	reg m_axi_rlast;
-	reg m_axi_rvalid;
+	wire m_axi_arready;
+	wire [63:0] m_axi_rdata;
+	wire [1:0] m_axi_rresp;
+	wire m_axi_rlast;
+	wire m_axi_rvalid;
 	wire m_axi_rready;
 
-	integer test_pass_count;
-	integer test_fail_count;
-	reg [31:0] resp_data;
-	integer timeout;
-	integer base_done;
-	integer base_done_hi;
-	integer issue_pass [1:5];
-	integer issue_fail [1:5];
-	integer idx;
-
-	InstructionCache instruction_cache (
+	InstructionCache #(
+		.NUM_SETS(NUM_SETS),
+		.CACHE_EN(CACHE_EN)
+	) instruction_cache (
 		.clk(clk),
 		.reset(reset),
 		.clk_enable(clk_enable),
-		.cpu_req_valid(cpu_req_valid),
-		.cpu_req_addr(cpu_req_addr),
-		.cpu_flush(cpu_flush),
+		.fetch_advance(fetch_advance),
+		.lookup_address(lookup_address),
+		.cpu_req_valid(issued),
+		.cpu_req_addr(fetch_pc),
+		.fence_i_req(fence_req),
+		.perf_clear(perf_clear),
 		.cpu_rdata(cpu_rdata),
-		.cpu_ready(cpu_ready),
-		.fence_i_req(fence_i_req),
+		.cpu_busy(cpu_busy),
+		.cpu_error(cpu_error),
 		.fence_i_done(fence_i_done),
+		.perf_access(perf_access),
+		.perf_miss(perf_miss),
+		.perf_stall(perf_stall),
+		.m_axi_arready(m_axi_arready),
+		.m_axi_arvalid(m_axi_arvalid),
 		.m_axi_araddr(m_axi_araddr),
 		.m_axi_arlen(m_axi_arlen),
 		.m_axi_arsize(m_axi_arsize),
 		.m_axi_arburst(m_axi_arburst),
-		.m_axi_arvalid(m_axi_arvalid),
-		.m_axi_arready(m_axi_arready),
 		.m_axi_rdata(m_axi_rdata),
+		.m_axi_rresp(m_axi_rresp),
 		.m_axi_rlast(m_axi_rlast),
 		.m_axi_rvalid(m_axi_rvalid),
 		.m_axi_rready(m_axi_rready)
 	);
 
-	// External AXI Transaction Monitor (No InstructionCache internal access)
-	reg axi_ar_handshake_seen;
-	reg [31:0] axi_last_araddr;
-	reg [7:0] axi_last_arlen;
+	// Memory contents (TB model and DummyDDRMemory hold the same words)
+	reg [63:0] memory [0:DDR_WORDS-1];
 
-	always @(posedge clk or posedge reset) begin
-		if (reset) begin
-			axi_ar_handshake_seen <= 1'b0;
-			axi_last_araddr <= 32'h0;
-			axi_last_arlen <= 8'h0;
-		end else begin
-			if (m_axi_arvalid && m_axi_arready) begin
-				axi_ar_handshake_seen <= 1'b1;
-				axi_last_araddr <= m_axi_araddr;
-				axi_last_arlen <= m_axi_arlen;
-			end
-		end
-	end
-
-	task clear_axi_monitor;
+	function [31:0] memory_word(input [31:0] address);
+		reg [63:0] line_word;
 		begin
-			axi_ar_handshake_seen = 1'b0;
-			axi_last_araddr = 32'h0;
-			axi_last_arlen = 8'h0;
-		end
-	endtask
-
-	// External FENCE.I Done Monitor (No InstructionCache internal access)
-	integer fence_done_cnt;
-	integer fence_done_hi_cnt;
-	reg fence_done_d;
-
-	always @(posedge clk or posedge reset) begin
-		if (reset) begin
-			fence_done_cnt <= 0;
-			fence_done_hi_cnt <= 0;
-			fence_done_d <= 1'b0;
-		end else begin
-			fence_done_d <= fence_i_done;
-			if (fence_i_done) begin
-				fence_done_hi_cnt <= fence_done_hi_cnt + 1;
-				if (!fence_done_d) fence_done_cnt <= fence_done_cnt + 1;
-			end
-		end
-	end
-
-	// TB AXI Slave Model
-	// axi_stress = 0 : original fixed-latency slave (ARREADY 1 cycle, RVALID back-to-back)
-	// axi_stress = 1 : random ARREADY delay (0..3 cycles) and random RVALID gaps inside a burst
-	reg axi_stress;
-	reg [31:0] latched_araddr;
-	reg [7:0] latched_arlen;
-	reg axi_read_active;
-	integer axi_beat_cnt;
-	reg [2:0] r_delay_cnt;
-	reg [2:0] ar_wait;
-	reg [2:0] ar_target;
-	reg beat_pending;
-	reg [1:0] gap_cnt;
-	integer rnd_ar;
-	integer rnd_r;
-
-	initial begin
-		m_axi_arready = 1'b0;
-		m_axi_rvalid = 1'b0;
-		m_axi_rlast = 1'b0;
-		m_axi_rdata = 64'h0;
-		axi_read_active = 1'b0;
-		axi_beat_cnt = 0;
-		r_delay_cnt = 0;
-		axi_stress = 1'b0;
-		ar_wait = 0;
-		ar_target = 0;
-		beat_pending = 1'b0;
-		gap_cnt = 0;
-		rnd_ar = 32'h1234_5678;
-		rnd_r = 32'h0BAD_CAFE;
-	end
-
-	always @(posedge clk or posedge reset) begin
-		if (reset) begin
-			m_axi_arready <= 1'b0;
-			axi_read_active <= 1'b0;
-			ar_wait <= 0;
-			ar_target <= 0;
-		end else begin
-			if (m_axi_arvalid && !m_axi_arready && !axi_read_active) begin
-				if (axi_stress && (ar_wait < ar_target)) begin
-					ar_wait <= ar_wait + 1;
-					m_axi_arready <= 1'b0;
-				end else begin
-					m_axi_arready <= 1'b1;
-					latched_araddr <= m_axi_araddr;
-					latched_arlen <= m_axi_arlen;
-					axi_read_active <= 1'b1;
-					ar_wait <= 0;
-					ar_target <= axi_stress ? ($random(rnd_ar) & 3) : 0;
-				end
-			end else begin
-				m_axi_arready <= 1'b0;
-			end
-			if (m_axi_rvalid && m_axi_rready && m_axi_rlast) begin
-				axi_read_active <= 1'b0;
-			end
-		end
-	end
-
-	always @(posedge clk or posedge reset) begin
-		if (reset) begin
-			m_axi_rvalid <= 1'b0;
-			m_axi_rlast <= 1'b0;
-			r_delay_cnt <= 0;
-			axi_beat_cnt <= 0;
-			beat_pending <= 1'b0;
-			gap_cnt <= 0;
-		end else begin
-			if (beat_pending) begin
-				// RVALID gap inside a burst (stress mode only)
-				if (gap_cnt > 1) begin
-					gap_cnt <= gap_cnt - 1;
-				end else begin
-					beat_pending <= 1'b0;
-					m_axi_rvalid <= 1'b1;
-					m_axi_rdata <= generate_mock_mem_data(latched_araddr, axi_beat_cnt);
-					m_axi_rlast <= (axi_beat_cnt == latched_arlen);
-				end
-			end else if (axi_read_active && !m_axi_rvalid) begin
-				if (r_delay_cnt < 2) begin
-					r_delay_cnt <= r_delay_cnt + 1;
-				end else begin
-					axi_beat_cnt <= 0;
-					m_axi_rvalid <= 1'b1;
-					m_axi_rdata <= generate_mock_mem_data(latched_araddr, 0);
-					m_axi_rlast <= (latched_arlen == 8'd0);
-				end
-			end else if (m_axi_rvalid && m_axi_rready) begin
-				if (axi_beat_cnt < latched_arlen) begin
-					axi_beat_cnt <= axi_beat_cnt + 1;
-					if (axi_stress && ($random(rnd_r) & 1)) begin
-						m_axi_rvalid <= 1'b0;
-						m_axi_rlast <= 1'b0;
-						beat_pending <= 1'b1;
-						gap_cnt <= 1 + ($random(rnd_r) & 1);
-					end else begin
-						m_axi_rdata <= generate_mock_mem_data(latched_araddr, axi_beat_cnt + 1);
-						m_axi_rlast <= (axi_beat_cnt + 1 == latched_arlen);
-					end
-				end else begin
-					m_axi_rvalid <= 1'b0;
-					m_axi_rlast <= 1'b0;
-					r_delay_cnt <= 0;
-				end
-			end
-		end
-	end
-
-	function [63:0] generate_mock_mem_data(input [31:0] base_addr, input integer beat);
-		reg [31:0] word0, word1;
-		begin
-			word0 = base_addr + (beat * 8) + 32'h0000_1000;
-			word1 = base_addr + (beat * 8) + 4 + 32'h0000_1000;
-			generate_mock_mem_data = {word1, word0};
+			line_word = memory[(address >> 3) & (DDR_WORDS-1)];
+			memory_word = address[2] ? line_word[63:32] : line_word[31:0];
 		end
 	endfunction
 
-	// Robust CPU Request-Response Handshake Task
-	task execute_req;
-		input [31:0] addr;
-		output [31:0] rdata;
-		integer tout;
+	// ------------------------------------------------------------------------
+	// Slave select
+	// ------------------------------------------------------------------------
+	reg use_dummy;
+	reg slave_gated; // TB model only : 1 = moves only on clk_enable edges (like InstructionMemory)
+
+	wire dummy_arready;
+	wire [63:0] dummy_rdata;
+	wire [1:0] dummy_rresp;
+	wire dummy_rlast;
+	wire dummy_rvalid;
+
+	DummyDDRMemory #(
+		.ADDRESS_WIDTH(14),
+		.READ_LATENCY(DUMMY_READ_LATENCY),
+		.ERROR_ENABLE(1),
+		.ERROR_ADDRESS_MASK(32'hFFFF_F000),
+		.READ_ERROR_ADDRESS(DUMMY_ERROR_ADDRESS)
+	) dummy_ddr_memory (
+		.clk(clk),
+		.reset(reset),
+		.s_axi_awaddr(32'h0),
+		.s_axi_awlen(8'd0),
+		.s_axi_awsize(3'd0),
+		.s_axi_awburst(2'd0),
+		.s_axi_awvalid(1'b0),
+		.s_axi_awready(),
+		.s_axi_wdata(64'h0),
+		.s_axi_wstrb(8'h0),
+		.s_axi_wlast(1'b0),
+		.s_axi_wvalid(1'b0),
+		.s_axi_wready(),
+		.s_axi_bresp(),
+		.s_axi_bvalid(),
+		.s_axi_bready(1'b0),
+		.s_axi_araddr(m_axi_araddr),
+		.s_axi_arlen(m_axi_arlen),
+		.s_axi_arsize(m_axi_arsize),
+		.s_axi_arburst(m_axi_arburst),
+		.s_axi_arvalid(m_axi_arvalid && use_dummy),
+		.s_axi_arready(dummy_arready),
+		.s_axi_rdata(dummy_rdata),
+		.s_axi_rresp(dummy_rresp),
+		.s_axi_rlast(dummy_rlast),
+		.s_axi_rvalid(dummy_rvalid),
+		.s_axi_rready(m_axi_rready && use_dummy)
+	);
+
+	// ------------------------------------------------------------------------
+	// TB AXI slave model
+	// error mode per burst : 0 none, 1 SLVERR on one beat, 2 RLAST early, 3 RLAST missing
+	// ------------------------------------------------------------------------
+	reg model_active; // a burst is accepted
+	reg [31:0] model_address;
+	reg [7:0] model_length;
+	reg [7:0] model_beat;
+	reg [3:0] model_wait;
+	reg [3:0] model_ar_wait;
+	reg [1:0] model_error_mode;
+	reg [1:0] model_error_beat;
+	reg model_rvalid;
+	reg [63:0] model_rdata;
+	reg [1:0] model_rresp;
+	reg model_rlast;
+	integer latency_max; // R latency 0 .. latency_max-1, beat gaps and AR wait 0 .. 2
+	integer error_rate; // 1 of error_rate bursts gets an error, 0 = never
+	reg [1:0] force_error_mode; // directed tests : error mode of the next burst
+	reg [1:0] force_error_beat;
+
+	wire model_step = !slave_gated || clk_enable;
+	wire model_arready = !use_dummy && !model_active && (model_ar_wait == 4'd0) && model_step;
+
+	assign m_axi_arready = use_dummy ? dummy_arready : model_arready;
+	assign m_axi_rdata = use_dummy ? dummy_rdata : model_rdata;
+	assign m_axi_rresp = use_dummy ? dummy_rresp : model_rresp;
+	assign m_axi_rlast = use_dummy ? dummy_rlast : model_rlast;
+	assign m_axi_rvalid = use_dummy ? dummy_rvalid : model_rvalid;
+
+	function integer random_below(input integer limit);
 		begin
-			// 1. Clear request and wait for cpu_ready to be 0
-			cpu_req_valid = 1'b0;
-			tout = 0;
-			while (cpu_ready && tout < 100) begin
-				@(negedge clk);
-				tout = tout + 1;
-			end
+			if (limit <= 1) random_below = 0;
+			else random_below = $unsigned($random) % limit;
+		end
+	endfunction
 
-			// 2. Drive new request at negedge
-			@(negedge clk);
-			cpu_req_valid = 1'b1;
-			cpu_req_addr = addr;
-
-			// 3. Wait for cpu_ready pulse
-			tout = 0;
-			while (!cpu_ready && tout < 500) begin
-				@(negedge clk);
-				tout = tout + 1;
-			end
-
-			if (tout >= 500) begin
-				$display("[FAIL-TIMEOUT] cpu_ready never asserted for addr 0x%h", addr);
-				test_fail_count = test_fail_count + 1;
-				rdata = 32'hDEAD_BEEF;
-			end else begin
-				// 4. Sample data at the exact cycle cpu_ready is high
-				rdata = cpu_rdata;
-			end
-
-			// 5. Deassert cpu_req_valid IMMEDIATELY in the same negedge cycle
-			cpu_req_valid = 1'b0;
-			cpu_req_addr = 32'h0;
-
-			// 6. Verify 1-cycle pulse duration on next cycle
-			@(negedge clk);
-			if (cpu_ready !== 1'b0) begin
-				$display("[FAIL-PROTOCOL] cpu_ready remained high for >1 cycle after addr 0x%h", addr);
-				test_fail_count = test_fail_count + 1;
-			end
+	task model_present_beat;
+		input [7:0] beat;
+		begin
+			model_rvalid <= 1'b1;
+			model_rdata <= memory[((model_address >> 3) + beat) & (DDR_WORDS-1)];
+			model_rresp <= (model_error_mode == 2'd1 && beat == model_error_beat) ? 2'b10 : 2'b00;
+			if (model_error_mode == 2'd2) model_rlast <= (beat == model_error_beat);
+			else if (model_error_mode == 2'd3) model_rlast <= 1'b0;
+			else model_rlast <= (beat == model_length);
 		end
 	endtask
 
-	// NOTE: msg is a Verilog string packed into a vector. 8 bits per character, so a
-	// [255:0] vector keeps only the LAST 32 characters and silently drops the head of
-	// longer strings (this is what produced "[PASS] che Miss & Refill ...").
-	// 1024 bits = 128 characters.
-	task assert_test(input condition, input [1023:0] msg);
-		begin
-			if (condition === 1'b1) begin // X/Z counts as FAIL
-				$display("  -> [PASS] %0s", msg);
-				test_pass_count = test_pass_count + 1;
-			end else begin
-				$display("  -> [FAIL] %0s", msg);
-				test_fail_count = test_fail_count + 1;
-			end
+	always @(posedge clk or posedge reset) begin
+		if (reset) begin
+			model_active <= 1'b0;
+			model_rvalid <= 1'b0;
+			model_rlast <= 1'b0;
+			model_rresp <= 2'b00;
+			model_rdata <= 64'h0;
+			model_beat <= 8'd0;
+			model_wait <= 4'd0;
+			model_ar_wait <= 4'd0;
 		end
-	endtask
-
-	task wait_cycles;
-		input integer n;
-		integer k;
-		begin
-			for (k = 0; k < n; k = k + 1) @(negedge clk);
-		end
-	endtask
-
-	task wait_fence_done;
-		input integer base_cnt;
-		input integer max_cycles;
-		integer k;
-		begin
-			k = 0;
-			while ((fence_done_cnt <= base_cnt) && (k < max_cycles)) begin
-				@(negedge clk);
-				k = k + 1;
-			end
-		end
-	endtask
-
-	// CPU Request with a cpu_flush window
-	// flush is high for flush_len cycles, starting flush_delay cycles after the request is driven
-	// The window is completed even after the response (flush held into IDLE)
-	task execute_req_flush;
-		input [31:0] addr;
-		input integer flush_delay;
-		input integer flush_len;
-		output [31:0] rdata;
-		integer c;
-		reg got_resp;
-		begin
-			cpu_req_valid = 1'b0;
-			c = 0;
-			while (cpu_ready && c < 100) begin
-				@(negedge clk);
-				c = c + 1;
-			end
-
-			@(negedge clk);
-			cpu_req_valid = 1'b1;
-			cpu_req_addr = addr;
-			rdata = 32'hDEAD_BEEF;
-			got_resp = 1'b0;
-			c = 0;
-
-			while ((!got_resp || (c < flush_delay + flush_len)) && c < 500) begin
-				cpu_flush = (c >= flush_delay) && (c < flush_delay + flush_len);
-				if (!got_resp && cpu_ready) begin
-					got_resp = 1'b1;
-					rdata = cpu_rdata;
-					cpu_req_valid = 1'b0;
-					cpu_req_addr = 32'h0;
-				end
-				@(negedge clk);
-				c = c + 1;
-			end
-			cpu_flush = 1'b0;
-
-			if (!got_resp) begin
-				$display("[FAIL-TIMEOUT] cpu_ready never asserted for addr 0x%h", addr);
-				test_fail_count = test_fail_count + 1;
-				cpu_req_valid = 1'b0;
-			end
-
-			@(negedge clk);
-		end
-	endtask
-
-	// CPU Request with a 1-cycle cpu_flush or fence_i_req pulse injected in a chosen FSM phase.
-	// The phase is detected only from external signals (no internal access):
-	//   PH_LOOKUP   : first cycle after the request is accepted (miss -> LOOKUP state)
-	//   PH_ADDR     : m_axi_arvalid is high (ALLOC_AR / BYPASS_AR)
-	//   PH_DATA_MID : a non-last R beat is being accepted (ALLOC_R, before rlast)
-	localparam PH_LOOKUP = 0;
-	localparam PH_ADDR = 1;
-	localparam PH_DATA_MID = 2;
-
-	task execute_req_inject;
-		input [31:0] addr;
-		input integer phase;
-		input inject_fence; // 0: cpu_flush pulse, 1: fence_i_req pulse
-		output [31:0] rdata;
-		output injected;
-		integer c;
-		reg got_resp;
-		reg hit_phase;
-		begin
-			cpu_req_valid = 1'b0;
-			c = 0;
-			while (cpu_ready && c < 100) begin
-				@(negedge clk);
-				c = c + 1;
-			end
-
-			@(negedge clk);
-			cpu_req_valid = 1'b1;
-			cpu_req_addr = addr;
-			rdata = 32'hDEAD_BEEF;
-			got_resp = 1'b0;
-			injected = 1'b0;
-			c = 0;
-
-			while (!got_resp && c < 500) begin
-				@(negedge clk);
-				c = c + 1;
-				// pulses last exactly one cycle
-				cpu_flush = 1'b0;
-				fence_i_req = 1'b0;
-
-				if (cpu_ready === 1'b1) begin
-					got_resp = 1'b1;
-					rdata = cpu_rdata;
-					cpu_req_valid = 1'b0;
-					cpu_req_addr = 32'h0;
-				end else if (!injected) begin
-					case (phase)
-						PH_LOOKUP: hit_phase = (c == 1);
-						PH_ADDR: hit_phase = (m_axi_arvalid === 1'b1);
-						PH_DATA_MID: hit_phase = (m_axi_rvalid === 1'b1) && (m_axi_rready === 1'b1) && (m_axi_rlast === 1'b0);
-						default: hit_phase = 1'b0;
-					endcase
-					if (hit_phase) begin
-						if (inject_fence) fence_i_req = 1'b1;
-						else cpu_flush = 1'b1;
-						injected = 1'b1;
+		else if (!use_dummy && model_step) begin
+			if (!model_active) begin
+				if (m_axi_arvalid && model_arready) begin
+					model_active <= 1'b1;
+					model_address <= m_axi_araddr;
+					model_length <= m_axi_arlen;
+					model_beat <= 8'd0;
+					model_wait <= random_below(latency_max);
+					model_ar_wait <= random_below(3);
+					if (force_error_mode != 2'd0) begin
+						model_error_mode <= force_error_mode;
+						model_error_beat <= force_error_beat;
+						force_error_mode <= 2'd0;
 					end
-				end
-			end
-			cpu_flush = 1'b0;
-			fence_i_req = 1'b0;
-
-			if (!got_resp) begin
-				$display("[FAIL-TIMEOUT] cpu_ready never asserted for addr 0x%h", addr);
-				test_fail_count = test_fail_count + 1;
-				cpu_req_valid = 1'b0;
-			end
-
-			@(negedge clk);
-		end
-	endtask
-
-	// Flush pulse in a given phase of a cacheable miss:
-	// response must be NOP, the line must still be allocated, the next miss must not be squashed
-	task check_flush_in_phase;
-		input [31:0] addr;
-		input [31:0] next_addr;
-		input integer phase;
-		input [1023:0] tag;
-		reg [31:0] d;
-		reg inj;
-		begin
-			clear_axi_monitor();
-			execute_req_inject(addr, phase, 1'b0, d, inj);
-			assert_test(inj && axi_ar_handshake_seen && (d === 32'h0000_0013), tag);
-			check_cached(addr, 1'b1, "  ...squashed refill still allocated the line (HIT)");
-			check_cached(next_addr, 1'b0, "  ...next miss is not squashed (flush consumed)");
-		end
-	endtask
-
-	// FENCE.I pulse in a given phase of a cacheable miss:
-	// response must be intact, exactly one done pulse must follow, the line must re-miss
-	task check_fence_in_phase;
-		input [31:0] addr;
-		input integer phase;
-		input [1023:0] tag;
-		reg [31:0] d;
-		reg inj;
-		integer base;
-		begin
-			base = fence_done_cnt;
-			clear_axi_monitor();
-			execute_req_inject(addr, phase, 1'b1, d, inj);
-			assert_test(inj && axi_ar_handshake_seen && (d === addr + 32'h0000_1000), tag);
-			wait_fence_done(base, 1000);
-			assert_test(fence_done_cnt == base + 1, "  ...pending FENCE.I is not lost (done)");
-			wait_cycles(700);
-			assert_test(fence_done_cnt == base + 1, "  ...no extra done");
-			check_cached(addr, 1'b0, "  ...line invalidated by the pending FENCE.I (re-miss)");
-		end
-	endtask
-
-	// Assertion tagged with the reported issue number (1..5)
-	task assert_issue;
-		input integer id;
-		input condition;
-		input [1023:0] msg;
-		begin
-			if (condition === 1'b1) begin // X/Z counts as FAIL
-				$display("  -> [PASS][ISSUE %0d] %0s", id, msg);
-				test_pass_count = test_pass_count + 1;
-				issue_pass[id] = issue_pass[id] + 1;
-			end else begin
-				$display("  -> [FAIL][ISSUE %0d] %0s", id, msg);
-				test_fail_count = test_fail_count + 1;
-				issue_fail[id] = issue_fail[id] + 1;
-			end
-		end
-	endtask
-
-
-	// ============================================================
-	// Helpers added for the coverage extension (TEST 15 ~ 22)
-	// ============================================================
-
-	// Cacheable access with hit/miss expectation. Data is always addr + 0x1000 (mock memory).
-	task check_cached;
-		input [31:0] addr;
-		input exp_hit;
-		input [1023:0] msg;
-		reg [31:0] d;
-		begin
-			clear_axi_monitor();
-			execute_req(addr, d);
-			if (exp_hit)
-				assert_test(!axi_ar_handshake_seen && (d == addr + 32'h0000_1000), msg);
-			else
-				assert_test(axi_ar_handshake_seen && (axi_last_arlen == 8'd3) &&
-					(axi_last_araddr == {addr[31:5], 5'b00000}) && (d == addr + 32'h0000_1000), msg);
-		end
-	endtask
-
-	// Same check, but only counts failures (used inside loops, aggregated by the caller)
-	task check_cached_quiet;
-		input [31:0] addr;
-		input exp_hit;
-		inout integer fails;
-		reg [31:0] d;
-		reg ok;
-		begin
-			clear_axi_monitor();
-			execute_req(addr, d);
-			if (exp_hit)
-				ok = !axi_ar_handshake_seen && (d == addr + 32'h0000_1000);
-			else
-				ok = axi_ar_handshake_seen && (axi_last_arlen == 8'd3) &&
-					(axi_last_araddr == {addr[31:5], 5'b00000}) && (d == addr + 32'h0000_1000);
-			if (ok !== 1'b1) begin // X/Z counts as mismatch
-				fails = fails + 1;
-				$display("     [detail] addr=0x%h exp_%0s: ar_seen=%0d arlen=%0d araddr=0x%h data=0x%h",
-					addr, exp_hit ? "HIT " : "MISS", axi_ar_handshake_seen, axi_last_arlen, axi_last_araddr, d);
-			end
-		end
-	endtask
-
-	// Non-cacheable (bypass) access: single 8-byte beat, 8-byte aligned ARADDR, correct word picked
-	task check_bypass;
-		input [31:0] addr;
-		input [1023:0] msg;
-		reg [31:0] d;
-		begin
-			clear_axi_monitor();
-			execute_req(addr, d);
-			assert_test(axi_ar_handshake_seen && (axi_last_arlen == 8'd0) &&
-				(axi_last_araddr == {addr[31:3], 3'b000}) && (d == addr + 32'h0000_1000), msg);
-		end
-	endtask
-
-	// FENCE.I with req held until done (protocol used by the SoC)
-	task do_fence;
-		integer base, k;
-		begin
-			base = fence_done_cnt;
-			@(negedge clk);
-			fence_i_req = 1'b1;
-			k = 0;
-			while ((fence_done_cnt <= base) && (k < 2000)) begin
-				@(negedge clk);
-				k = k + 1;
-			end
-			fence_i_req = 1'b0;
-			if (k >= 2000) begin
-				$display("[FAIL-TIMEOUT] fence_i_done never asserted");
-				test_fail_count = test_fail_count + 1;
-			end
-			@(negedge clk);
-			@(negedge clk);
-		end
-	endtask
-
-	// Behavioral reference model (valid / tag / true-LRU per set)
-	reg m_v0 [0:511];
-	reg m_v1 [0:511];
-	reg [17:0] m_t0 [0:511];
-	reg [17:0] m_t1 [0:511];
-	reg m_lru [0:511];
-	integer m_i;
-
-	task model_clear;
-		begin
-			for (m_i = 0; m_i < 512; m_i = m_i + 1) begin
-				m_v0[m_i] = 1'b0;
-				m_v1[m_i] = 1'b0;
-				m_lru[m_i] = 1'b0;
-			end
-		end
-	endtask
-
-	// Random scoreboard: compares InstructionCache against the reference model (hit/miss, data, AXI attributes)
-	integer sb_req, sb_hit, sb_miss, sb_byp, sb_fence, sb_mism;
-
-	task rand_scoreboard;
-		input integer n;
-		input integer seed_in;
-		integer i, seed, kind, sel;
-		reg [8:0] idx;
-		reg [14:0] tg;
-		reg [2:0] wd;
-		reg [17:0] full_tag;
-		reg [31:0] addr, d, rnd;
-		reg exp_hit, hit0, hit1, way, ok;
-		reg [8:0] set_pool [0:5];
-		reg [14:0] tag_pool [0:4];
-		begin
-			seed = seed_in;
-			sb_req = 0; sb_hit = 0; sb_miss = 0; sb_byp = 0; sb_fence = 0; sb_mism = 0;
-
-			// small pools -> frequent conflicts, both low and high index / tag bits are exercised
-			set_pool[0] = 9'd0; set_pool[1] = 9'd1; set_pool[2] = 9'd17;
-			set_pool[3] = 9'd255; set_pool[4] = 9'd256; set_pool[5] = 9'd511;
-			tag_pool[0] = 15'h0000; tag_pool[1] = 15'h0001; tag_pool[2] = 15'h0002;
-			tag_pool[3] = 15'h4000; tag_pool[4] = 15'h2AAA;
-
-			do_fence;
-			model_clear;
-
-			for (i = 0; i < n; i = i + 1) begin
-				rnd = $random(seed);
-				kind = (rnd & 32'h7FFF_FFFF) % 100;
-
-				if (kind < 3) begin
-					do_fence;
-					model_clear;
-					sb_fence = sb_fence + 1;
-				end else if (kind < 13) begin
-					// non-cacheable
-					rnd = $random(seed);
-					addr = rnd & 32'hFFFF_FFFC;
-					if (addr[31:29] == 3'b100) addr[31] = 1'b0;
-					clear_axi_monitor();
-					execute_req(addr, d);
-					ok = axi_ar_handshake_seen && (axi_last_arlen == 8'd0) &&
-						(axi_last_araddr == {addr[31:3], 3'b000}) && (d == addr + 32'h0000_1000);
-					sb_byp = sb_byp + 1;
-					sb_req = sb_req + 1;
-					if (ok !== 1'b1) begin // X/Z counts as mismatch
-						sb_mism = sb_mism + 1;
-						if (sb_mism <= 5) $display("     [SB-MISMATCH] bypass addr=0x%h data=0x%h arlen=%0d araddr=0x%h",
-							addr, d, axi_last_arlen, axi_last_araddr);
+					else if (error_rate != 0 && random_below(error_rate) == 0) begin
+						// RLAST early only makes sense for a 4-beat burst
+						model_error_mode <= (m_axi_arlen == 8'd0) ? (($random & 1) ? 2'd1 : 2'd3) : (1 + random_below(3));
+						model_error_beat <= (m_axi_arlen == 8'd0) ? 2'd0 : random_below(3);
 					end
-				end else begin
-					// cacheable
-					rnd = $random(seed); sel = (rnd & 32'h7FFF_FFFF) % 6; idx = set_pool[sel];
-					rnd = $random(seed); sel = (rnd & 32'h7FFF_FFFF) % 5; tg = tag_pool[sel];
-					rnd = $random(seed); wd = rnd[2:0];
-					addr = {3'b100, tg, idx, wd, 2'b00};
-					full_tag = {3'b100, tg};
-
-					hit0 = m_v0[idx] && (m_t0[idx] == full_tag);
-					hit1 = m_v1[idx] && (m_t1[idx] == full_tag);
-					exp_hit = hit0 || hit1;
-					if (hit0) m_lru[idx] = 1'b1;
-					else if (hit1) m_lru[idx] = 1'b0;
 					else begin
-						way = !m_v0[idx] ? 1'b0 : (!m_v1[idx] ? 1'b1 : m_lru[idx]);
-						if (!way) begin m_v0[idx] = 1'b1; m_t0[idx] = full_tag; end
-						else begin m_v1[idx] = 1'b1; m_t1[idx] = full_tag; end
-						m_lru[idx] = ~way;
-					end
-
-					clear_axi_monitor();
-					execute_req(addr, d);
-					ok = (d == addr + 32'h0000_1000) && (axi_ar_handshake_seen == !exp_hit);
-					if (!exp_hit)
-						ok = ok && (axi_last_arlen == 8'd3) && (axi_last_araddr == {addr[31:5], 5'b00000});
-					sb_req = sb_req + 1;
-					if (exp_hit) sb_hit = sb_hit + 1; else sb_miss = sb_miss + 1;
-					if (ok !== 1'b1) begin // X/Z counts as mismatch
-						sb_mism = sb_mism + 1;
-						if (sb_mism <= 5) $display("     [SB-MISMATCH] addr=0x%h exp=%0s data=0x%h ar_seen=%0d",
-							addr, exp_hit ? "HIT" : "MISS", d, axi_ar_handshake_seen);
+						model_error_mode <= 2'd0;
 					end
 				end
+				else if (model_ar_wait != 4'd0) begin
+					model_ar_wait <= model_ar_wait - 4'd1;
+				end
+			end
+			else if (model_rvalid) begin
+				if (m_axi_rready) begin
+					if ((model_error_mode == 2'd2) ? (model_beat == model_error_beat) : (model_beat == model_length)) begin
+						model_rvalid <= 1'b0;
+						model_rlast <= 1'b0;
+						model_active <= 1'b0;
+					end
+					else begin
+						model_beat <= model_beat + 8'd1;
+						model_wait <= random_below(3);
+						if (random_below(3) == 0) model_present_beat(model_beat + 8'd1);
+						else model_rvalid <= 1'b0;
+					end
+				end
+			end
+			else if (model_wait != 4'd0) begin
+				model_wait <= model_wait - 4'd1;
+			end
+			else begin
+				model_present_beat(model_beat);
+			end
+		end
+	end
+
+	// ------------------------------------------------------------------------
+	// Reference model of the cache
+	// ------------------------------------------------------------------------
+	reg reference_valid0 [0:NUM_SETS-1];
+	reg reference_valid1 [0:NUM_SETS-1];
+	reg [31:0] reference_tag0 [0:NUM_SETS-1];
+	reg [31:0] reference_tag1 [0:NUM_SETS-1];
+	reg reference_lru [0:NUM_SETS-1]; // way to evict next
+	integer set_index;
+
+	function cacheable(input [31:0] address);
+		cacheable = (CACHE_EN != 0) && (address[31:29] == 3'b100);
+	endfunction
+
+	function [INDEX_BITS-1:0] index_of(input [31:0] address);
+		index_of = address[5+INDEX_BITS-1:5];
+	endfunction
+
+	function [31:0] tag_of(input [31:0] address);
+		tag_of = address >> (5 + INDEX_BITS);
+	endfunction
+
+	// 0 : miss, 1 : hit way 0, 2 : hit way 1
+	function [1:0] reference_lookup(input [31:0] address);
+		begin
+			if (reference_valid0[index_of(address)] && reference_tag0[index_of(address)] == tag_of(address))
+				reference_lookup = 2'd1;
+			else if (reference_valid1[index_of(address)] && reference_tag1[index_of(address)] == tag_of(address))
+				reference_lookup = 2'd2;
+			else
+				reference_lookup = 2'd0;
+		end
+	endfunction
+
+	task reference_reset;
+		begin
+			for (set_index = 0; set_index < NUM_SETS; set_index = set_index + 1) begin
+				reference_valid0[set_index] = 1'b0;
+				reference_valid1[set_index] = 1'b0;
+				reference_lru[set_index] = 1'b0;
 			end
 		end
 	endtask
 
-	// Main Test Execution
+	task reference_invalidate;
+		begin
+			for (set_index = 0; set_index < NUM_SETS; set_index = set_index + 1) begin
+				reference_valid0[set_index] = 1'b0;
+				reference_valid1[set_index] = 1'b0;
+			end
+		end
+	endtask
+
+	// end of a 4-beat refill : the victim way gets the line, or loses it on an error
+	task reference_refill;
+		input [31:0] address;
+		input failed;
+		reg victim;
+		reg [INDEX_BITS-1:0] index;
+		begin
+			index = index_of(address);
+			victim = !reference_valid0[index] ? 1'b0 : !reference_valid1[index] ? 1'b1 : reference_lru[index];
+			if (victim == 1'b0) begin
+				reference_valid0[index] = !failed;
+				reference_tag0[index] = tag_of(address);
+			end
+			else begin
+				reference_valid1[index] = !failed;
+				reference_tag1[index] = tag_of(address);
+			end
+			if (!failed) reference_lru[index] = ~victim;
+		end
+	endtask
+
+	// ------------------------------------------------------------------------
+	// Monitor, checker and core driver
+	// ------------------------------------------------------------------------
+	integer error_count; // protocol / data / model mismatches
+	integer ar_count; // AR handshakes
+	integer refill_count; // AR handshakes with ARLEN = 3
+	integer burst_done_count;
+	reg last_burst_error;
+	reg burst_open;
+	reg [31:0] burst_address;
+	reg [7:0] burst_length;
+	reg [7:0] burst_beats;
+	reg burst_error;
+	reg ar_pending; // ARVALID was high without ARREADY on the previous edge
+	reg [31:0] ar_pending_address;
+	reg [7:0] ar_pending_length;
+
+	integer fence_done_count;
+	integer fence_gap;
+	integer fence_rate; // random phases : 1 of fence_rate cycles raises fence_i_req, 0 = never
+	reg fence_done_previous;
+
+	// fetch at the output
+	reg checked;
+	reg predicted_hit;
+	reg served_before_fence;
+	integer ar_at_issue;
+	integer bursts_at_issue;
+	integer fence_at_issue;
+	reg [31:0] saved_rdata;
+	reg saved_error;
+	integer completed_count;
+	integer error_fetch_count;
+	integer hit_count;
+	integer wait_cycles;
+
+	// expected performance counters
+	integer access_expected;
+	integer miss_expected;
+	integer stall_expected;
+
+	integer cycle_count;
+	reg check_messages; // print every mismatch (directed) or only the first few (random)
+	integer mismatch_print;
+
+	task report_mismatch;
+		input [8*64-1:0] what;
+		begin
+			error_count = error_count + 1;
+			if (check_messages || mismatch_print < 10)
+				$display("     [mismatch] t=%0t %0s : pc=%h rdata=%h error=%b expected=%h", $time, what,
+					fetch_pc, cpu_rdata, cpu_error, memory_word(fetch_pc));
+			mismatch_print = mismatch_print + 1;
+		end
+	endtask
+
+	reg [1:0] lookup_result;
+	reg expect_error;
+	integer burst_since;
+	integer ar_since;
+
+	always @(posedge clk) begin
+		cycle_count = cycle_count + 1;
+		if (reset) begin
+			issued <= 1'b0;
+			fence_req <= 1'b0;
+			checked = 1'b0;
+			burst_open = 1'b0;
+			ar_pending = 1'b0;
+			fence_done_previous = 1'b0;
+			access_expected = 0;
+			miss_expected = 0;
+			stall_expected = 0;
+			if (!issued && !fence_req && (cpu_rdata !== NOP || cpu_busy !== 1'b0 || cpu_error !== 1'b0)) begin
+				error_count = error_count + 1;
+				$display("     [mismatch] t=%0t during reset : rdata=%h busy=%b error=%b", $time, cpu_rdata, cpu_busy, cpu_error);
+			end
+		end
+		else begin
+			// ---------------- AXI protocol ----------------
+			if (m_axi_rready && !clk_enable) begin
+				error_count = error_count + 1;
+				$display("     [mismatch] t=%0t RREADY with clk_enable = 0", $time);
+			end
+			if (ar_pending && (!m_axi_arvalid || m_axi_araddr != ar_pending_address || m_axi_arlen != ar_pending_length)) begin
+				error_count = error_count + 1;
+				$display("     [mismatch] t=%0t ARVALID / ARADDR changed before ARREADY", $time);
+			end
+			ar_pending = m_axi_arvalid && !m_axi_arready;
+			ar_pending_address = m_axi_araddr;
+			ar_pending_length = m_axi_arlen;
+
+			if (m_axi_arvalid && m_axi_arready) begin
+				ar_count = ar_count + 1;
+				if (burst_open || m_axi_arsize != 3'b011 || m_axi_arburst != 2'b01 ||
+					!((m_axi_arlen == 8'd3 && m_axi_araddr[4:0] == 5'd0) || (m_axi_arlen == 8'd0 && m_axi_araddr[2:0] == 3'd0))) begin
+					error_count = error_count + 1;
+					$display("     [mismatch] t=%0t bad AR : open=%b addr=%h len=%0d size=%0d burst=%0d", $time,
+						burst_open, m_axi_araddr, m_axi_arlen, m_axi_arsize, m_axi_arburst);
+				end
+				if (m_axi_arlen == 8'd3) begin
+					refill_count = refill_count + 1;
+					if (!perf_clear) miss_expected = miss_expected + 1;
+				end
+				burst_open = 1'b1;
+				burst_address = m_axi_araddr;
+				burst_length = m_axi_arlen;
+				burst_beats = 8'd0;
+				burst_error = 1'b0;
+			end
+
+			if (m_axi_rvalid && m_axi_rready) begin
+				if (!burst_open) begin
+					error_count = error_count + 1;
+					$display("     [mismatch] t=%0t R beat without a burst", $time);
+				end
+				if (m_axi_rresp[1] || (m_axi_rlast != (burst_beats == burst_length))) burst_error = 1'b1;
+				if (m_axi_rlast || burst_beats == burst_length) begin
+					burst_open = 1'b0;
+					burst_done_count = burst_done_count + 1;
+					last_burst_error = burst_error;
+					if (burst_length == 8'd3) reference_refill(burst_address, burst_error);
+				end
+				burst_beats = burst_beats + 8'd1;
+			end
+
+			// ---------------- FENCE.I handshake (core side runs on clk_enable) ----------------
+			if (clk_enable) begin
+				if (fence_done_previous && fence_i_done) begin
+					error_count = error_count + 1;
+					$display("     [mismatch] t=%0t fence_i_done longer than 1 cycle", $time);
+				end
+				if (fence_i_done && !fence_req) begin
+					error_count = error_count + 1;
+					$display("     [mismatch] t=%0t fence_i_done without a request", $time);
+				end
+				fence_done_previous = fence_i_done;
+				if (fence_req && cpu_busy !== 1'b1) begin
+					error_count = error_count + 1;
+					$display("     [mismatch] t=%0t cpu_busy = 0 while fence_i_req is high", $time);
+				end
+				if (fence_req && fence_i_done) begin
+					// req is held up to the done cycle and dropped here (level protocol)
+					fence_req <= 1'b0;
+					fence_done_count = fence_done_count + 1;
+					fence_gap = 1 + random_below(3);
+					reference_invalidate;
+					if (issued) begin
+						// an error answer is kept by the cache (served), no refetch after the invalidation
+						served_before_fence = (checked && saved_error) ||
+							(!checked && (burst_done_count - bursts_at_issue > 0) && last_burst_error);
+						checked = 1'b0;
+						ar_at_issue = ar_count;
+						bursts_at_issue = burst_done_count;
+					end
+				end
+				else if (!fence_req && fence_gap > 0) begin
+					fence_gap = fence_gap - 1;
+				end
+				else if (!fence_req && fence_rate != 0 && random_below(fence_rate) == 0 && stream_pos < stream_len) begin
+					fence_req <= 1'b1;
+				end
+			end
+
+			// ---------------- performance counters ----------------
+			if (clk_enable) begin
+				if (perf_clear) begin
+					access_expected = 0;
+					miss_expected = 0;
+					stall_expected = 0;
+				end
+				else begin
+					if (cpu_busy && !fence_req) stall_expected = stall_expected + 1;
+					if (fetch_advance && issued && cacheable(fetch_pc)) access_expected = access_expected + 1;
+				end
+			end
+
+			// ---------------- fetch completion ----------------
+			if (clk_enable && !cpu_busy && issued) begin
+				if (!checked) begin
+					ar_since = ar_count - ar_at_issue;
+					burst_since = burst_done_count - bursts_at_issue;
+					expect_error = (burst_since > 0) ? last_burst_error : served_before_fence;
+					if (cpu_error !== expect_error)
+						report_mismatch("cpu_error");
+					else if (!expect_error && cpu_rdata !== memory_word(fetch_pc))
+						report_mismatch("cpu_rdata");
+					if (fence_at_issue == fence_done_count) begin
+						if (!cacheable(fetch_pc)) begin
+							if (ar_since != 1 || burst_length != 8'd0) report_mismatch("bypass is not one single-beat burst");
+						end
+						else if (predicted_hit) begin
+							if (ar_since != 0) report_mismatch("model hit, cache went to AXI");
+						end
+						else if (ar_since != 1) begin
+							report_mismatch("model miss, cache did not refill once");
+						end
+						if (cacheable(fetch_pc) && ar_since == 0) begin
+							lookup_result = reference_lookup(fetch_pc);
+							if (lookup_result == 2'd1) reference_lru[index_of(fetch_pc)] = 1'b1;
+							else if (lookup_result == 2'd2) reference_lru[index_of(fetch_pc)] = 1'b0;
+							if (predicted_hit) hit_count = hit_count + 1;
+						end
+					end
+					if (cpu_error) error_fetch_count = error_fetch_count + 1;
+					saved_rdata = cpu_rdata;
+					saved_error = cpu_error;
+					checked = 1'b1;
+					completed_count = completed_count + 1;
+				end
+				else if (cpu_rdata !== saved_rdata || cpu_error !== saved_error) begin
+					report_mismatch("output changed while the fetch was held");
+				end
+			end
+
+			// watchdog
+			if (issued && !checked) wait_cycles = wait_cycles + 1;
+			else wait_cycles = 0;
+			if (wait_cycles > 20000) begin
+				$display("[FAIL] fetch of %h never finished (state=%0d)", fetch_pc, instruction_cache.state);
+				$fatal(1, "InstructionCache_tb: hang");
+			end
+
+			// ---------------- next fetch ----------------
+			if (fetch_advance) begin
+				fetch_pc <= lookup_address;
+				issued <= 1'b1;
+				stream_pos <= stream_pos + 1;
+				lookup_result = reference_lookup(lookup_address);
+				predicted_hit = cacheable(lookup_address) && (lookup_result != 2'd0);
+				served_before_fence = 1'b0;
+				ar_at_issue = ar_count;
+				bursts_at_issue = burst_done_count;
+				fence_at_issue = fence_done_count;
+				checked = 1'b0;
+			end
+		end
+	end
+
+	// ------------------------------------------------------------------------
+	// clk_enable / stall stimulus (changed between edges)
+	// ------------------------------------------------------------------------
+	integer clk_enable_rate; // 1 of clk_enable_rate cycles has clk_enable = 0, 0 = always 1
+	integer stall_rate;
+
+	always @(negedge clk) begin
+		clk_enable = (clk_enable_rate == 0) ? 1'b1 : (random_below(clk_enable_rate) != 0);
+		stall = (stall_rate == 0) ? 1'b0 : (random_below(stall_rate) == 0);
+	end
+
+	// ------------------------------------------------------------------------
+	// Test helpers
+	// ------------------------------------------------------------------------
+	integer pass_count;
+	integer fail_count;
+
+	task check;
+		input condition;
+		input [8*96-1:0] name;
+		begin
+			if (condition) begin
+				pass_count = pass_count + 1;
+				$display("  -> [PASS] %0s", name);
+			end
+			else begin
+				fail_count = fail_count + 1;
+				$display("  -> [FAIL] %0s", name);
+			end
+		end
+	endtask
+
+	task check_no_mismatch;
+		input [8*96-1:0] name;
+		input integer before;
+		begin
+			if (error_count == before) begin
+				pass_count = pass_count + 1;
+				$display("  -> [PASS] %0s", name);
+			end
+			else begin
+				fail_count = fail_count + 1;
+				$display("  -> [FAIL] %0s (%0d mismatches)", name, error_count - before);
+			end
+		end
+	endtask
+
+	task fill_memory;
+		input [31:0] seed;
+		integer w;
+		reg [31:0] address;
+		begin
+			for (w = 0; w < DDR_WORDS; w = w + 1) begin
+				address = 32'h8000_0000 + w * 8;
+				memory[w] = {(address + 32'd4) ^ seed, address ^ seed};
+				dummy_ddr_memory.memory[w] = memory[w];
+			end
+		end
+	endtask
+
+	task set_memory_word;
+		input [31:0] address;
+		input [31:0] value;
+		integer w;
+		begin
+			w = (address >> 3) & (DDR_WORDS-1);
+			if (address[2]) memory[w][63:32] = value;
+			else memory[w][31:0] = value;
+			dummy_ddr_memory.memory[w] = memory[w];
+		end
+	endtask
+
+	// run the fetches stream[0 .. count-1] and wait until the last one is answered
+	task run_stream;
+		input integer count;
+		integer guard;
+		begin
+			@(negedge clk);
+			stream_pos = 0;
+			stream_len = count;
+			guard = 0;
+			while (!(stream_pos == stream_len && issued && checked && !fence_req) && guard < 4000000) begin
+				@(negedge clk);
+				guard = guard + 1;
+			end
+			if (guard >= 4000000) begin
+				$display("[FAIL] stream did not finish");
+				$fatal(1, "InstructionCache_tb: stream timeout");
+			end
+		end
+	endtask
+
+	task wait_stream_done;
+		begin
+			while (!(stream_pos == stream_len && issued && checked && !fence_req)) @(negedge clk);
+		end
+	endtask
+
+	task do_reset;
+		begin
+			@(negedge clk);
+			reset = 1'b1;
+			stream_len = 0;
+			stream_pos = 0;
+			repeat (3) @(negedge clk);
+			reset = 1'b0;
+			reference_reset;
+		end
+	endtask
+
+	task clear_perf;
+		begin
+			@(negedge clk);
+			perf_clear = 1'b1;
+			@(negedge clk);
+			while (!clk_enable) @(negedge clk);
+			perf_clear = 1'b0;
+		end
+	endtask
+
+	task check_perf;
+		input [8*48-1:0] name;
+		begin
+			check(perf_access == access_expected && perf_miss == miss_expected && perf_stall == stall_expected,
+				name);
+			if (!(perf_access == access_expected && perf_miss == miss_expected && perf_stall == stall_expected))
+				$display("     access %0d/%0d miss %0d/%0d stall %0d/%0d (cache/expected)",
+					perf_access, access_expected, perf_miss, miss_expected, perf_stall, stall_expected);
+		end
+	endtask
+
+	task set_quiet;
+		begin
+			clk_enable_rate = 0;
+			stall_rate = 0;
+			fence_rate = 0;
+			error_rate = 0;
+			latency_max = 1;
+			use_dummy = 1'b0;
+			slave_gated = 1'b0;
+		end
+	endtask
+
+	// address in the DDR window : tag 0 .. 3 (so sets see conflicts), any set, any word
+	function [31:0] random_address;
+		input dummy_errors;
+		begin
+			random_address = 32'h8000_0000 + random_below(4) * WAY_BYTES + ($unsigned($random) % NUM_SETS) * 32
+				+ random_below(8) * 4;
+			if (dummy_errors && random_below(64) == 0)
+				random_address = DUMMY_ERROR_ADDRESS + ($unsigned($random) % 1024) * 4;
+			else if (random_below(128) == 0)
+				random_address = $unsigned($random) % 32'h0002_0000 & 32'hFFFF_FFFC; // not cacheable : bypass
+		end
+	endfunction
+
+	task random_phase;
+		input [8*80-1:0] name;
+		input dummy;
+		input gated;
+		input integer ce_rate;
+		input integer errors;
+		input integer fences;
+		integer n;
+		integer before;
+		integer errors_before;
+		integer hits_before;
+		integer refills_before;
+		integer fences_before;
+		begin
+			$display("\n[RANDOM] %0s", name);
+			set_quiet;
+			use_dummy = dummy;
+			slave_gated = gated;
+			latency_max = 6;
+			do_reset;
+			clear_perf;
+			stream[0] = random_address(dummy);
+			for (n = 1; n < RANDOM_FETCHES; n = n + 1) begin
+				if (random_below(4) != 0 && stream[n-1][31:29] == 3'b100)
+					stream[n] = 32'h8000_0000 + ((stream[n-1] + 4) & 32'h0001_FFFC); // straight-line code
+				else
+					stream[n] = random_address(dummy);
+			end
+			before = error_count;
+			errors_before = error_fetch_count;
+			hits_before = hit_count;
+			refills_before = refill_count;
+			fences_before = fence_done_count;
+			mismatch_print = 0;
+			check_messages = 1'b0;
+			clk_enable_rate = ce_rate;
+			stall_rate = 4;
+			error_rate = errors;
+			fence_rate = fences;
+			run_stream(RANDOM_FETCHES);
+			fence_rate = 0;
+			clk_enable_rate = 0;
+			stall_rate = 0;
+			repeat (4) @(negedge clk);
+			$display("     %0d fetches, %0d hits, %0d with cpu_error, %0d refills, %0d FENCE.I", RANDOM_FETCHES,
+				hit_count - hits_before, error_fetch_count - errors_before, refill_count - refills_before,
+				fence_done_count - fences_before);
+			check_no_mismatch("every fetch matches memory and the reference model", before);
+			check_perf("perf counters");
+			check_messages = 1'b1;
+		end
+	endtask
+
+	// ------------------------------------------------------------------------
+	// Tests
+	// ------------------------------------------------------------------------
+	integer before;
+	integer ar_before;
+	integer refill_before;
+	integer t_start;
+	integer t_end;
+	integer busy_seen;
+	integer k;
+	integer fence_cycles;
+	reg [31:0] base;
+
 	initial begin
-		clk = 1'b0;
+		pass_count = 0;
+		fail_count = 0;
+		error_count = 0;
+		ar_count = 0;
+		refill_count = 0;
+		burst_done_count = 0;
+		last_burst_error = 1'b0;
+		fence_done_count = 0;
+		fence_gap = 0;
+		completed_count = 0;
+		error_fetch_count = 0;
+		hit_count = 0;
+		wait_cycles = 0;
+		access_expected = 0;
+		miss_expected = 0;
+		stall_expected = 0;
+		cycle_count = 0;
+		check_messages = 1'b1;
+		mismatch_print = 0;
+		force_error_mode = 2'd0;
+		force_error_beat = 2'd0;
+		perf_clear = 1'b0;
+		fetch_pc = 32'h0;
+		stream_len = 0;
+		stream_pos = 0;
 		reset = 1'b1;
+		set_quiet;
 		clk_enable = 1'b1;
-		cpu_req_valid = 1'b0;
-		cpu_req_addr = 32'h0;
-		cpu_flush = 1'b0;
-		fence_i_req = 1'b0;
-		test_pass_count = 0;
-		test_fail_count = 0;
-		resp_data = 32'h0;
-		for (idx = 1; idx <= 5; idx = idx + 1) begin
-			issue_pass[idx] = 0;
-			issue_fail[idx] = 0;
-		end
+		stall = 1'b0;
+		fill_memory(32'h0);
+		reference_reset;
+		repeat (3) @(negedge clk);
+		reset = 1'b0;
 
-		#25 reset = 1'b0;
+		$display("==================================================================");
+		$display(" InstructionCache_tb  NUM_SETS=%0d  CACHE_EN=%0d", NUM_SETS, CACHE_EN);
+		$display("==================================================================");
 
-		$display("========================================================");
-		$display("   RV32IM54F8SP Instruction-CACHE FULL VERIFICATION SUITE         ");
-		$display("========================================================");
+		// --------------------------------------------------------------------
+		$display("\n[T-I01] one line : word offsets 0 .. 7");
+		base = 32'h8000_0100;
+		for (k = 0; k < 8; k = k + 1) stream[k] = base + k * 4;
+		for (k = 0; k < 8; k = k + 1) stream[8 + k] = base + (7 - k) * 4;
+		before = error_count;
+		ar_before = ar_count;
+		run_stream(16);
+		check_no_mismatch("16 fetches return the memory word", before);
+		if (CACHE_EN != 0) check(ar_count - ar_before == 1, "one refill, the other 15 fetches hit");
+		else check(ar_count - ar_before == 16, "CACHE_EN=0 : every fetch is a single-beat AXI read");
 
-		// TEST 1: Primary Miss & Line Refill
-		$display("\n[TEST 1] Cache Miss & Refill (0x8000_0000)");
-		clear_axi_monitor();
-		execute_req(32'h8000_0000, resp_data);
-		assert_test(axi_ar_handshake_seen && (axi_last_arlen == 8'd3) && (resp_data == 32'h8000_1000),
-			"Miss Refill Data 0x80001000");
-
-		// TEST 2-4: Cache Hits on Same Line
-		$display("\n[TEST 2] Cache Hit Offset 0x4 (0x8000_0004)");
-		clear_axi_monitor();
-		execute_req(32'h8000_0004, resp_data);
-		assert_test(!axi_ar_handshake_seen && (resp_data == 32'h8000_1004),
-			"Hit Data 0x80001004 (no AXI traffic)");
-
-		$display("\n[TEST 3] Cache Hit Offset 0x8 (0x8000_0008)");
-		clear_axi_monitor();
-		execute_req(32'h8000_0008, resp_data);
-		assert_test(!axi_ar_handshake_seen && (resp_data == 32'h8000_1008),
-			"Hit Data 0x80001008 (no AXI traffic)");
-
-		$display("\n[TEST 4] Cache Hit Offset 0x1C (0x8000_001C)");
-		clear_axi_monitor();
-		execute_req(32'h8000_001C, resp_data);
-		assert_test(!axi_ar_handshake_seen && (resp_data == 32'h8000_101C),
-			"Hit Data 0x8000101C (no AXI traffic)");
-
-		// TEST 5: Bypass / Uncached Access
-		$display("\n[TEST 5] Uncached / Bypass Read (0x0000_0100)");
-		clear_axi_monitor();
-		execute_req(32'h0000_0100, resp_data);
-		assert_test(axi_ar_handshake_seen && (axi_last_arlen == 8'd0) && (resp_data == 32'h0000_1100),
-			"Bypass Single Read (ARLEN=0) & Data 0x00001100");
-
-		// TEST 6-7: 2-Way Associativity and LRU Eviction
-		$display("\n[TEST 6] Tag Replacement - Fill Way 1 (0x8004_0000)");
-		clear_axi_monitor();
-		execute_req(32'h8004_0000, resp_data); // Diff Tag, Same Index 0
-		assert_test(axi_ar_handshake_seen && (resp_data == 32'h8004_1000),
-			"Diff Tag inserted into Way 1");
-
-		$display("\n[TEST 7] Tag Replacement - Evict Way 0 by LRU (0x8008_0000)");
-		clear_axi_monitor();
-		execute_req(32'h8008_0000, resp_data); // 3rd Tag, evicts Way 0
-		assert_test(axi_ar_handshake_seen && (resp_data == 32'h8008_1000),
-			"Evicted Way 0 properly");
-
-		// TEST 8: Pipeline Flush Injection
-		$display("\n[TEST 8] Pipeline Flush Injection (0x800C_0040)");
-		clear_axi_monitor();
-		@(negedge clk);
-		cpu_req_valid = 1'b1;
-		cpu_req_addr = 32'h800C_0040;
-
-		timeout = 0;
-		while (!m_axi_arvalid && timeout < 100) begin
+		// --------------------------------------------------------------------
+		if (CACHE_EN != 0) begin
+			$display("\n[T-I02] hit throughput");
+			for (k = 0; k < 64; k = k + 1) stream[k] = 32'h8000_0400 + k * 4;
+			run_stream(64); // warm 8 lines
+			for (k = 0; k < 65; k = k + 1) stream[k] = 32'h8000_0400 + (k % 64) * 4;
+			before = error_count;
+			ar_before = ar_count;
+			busy_seen = 0;
 			@(negedge clk);
-			timeout = timeout + 1;
-		end
-
-		@(negedge clk);
-		cpu_flush = 1'b1;
-		@(negedge clk);
-		cpu_flush = 1'b0;
-
-		timeout = 0;
-		while (!cpu_ready && timeout < 500) begin
-			@(negedge clk);
-			timeout = timeout + 1;
-		end
-
-		resp_data = cpu_rdata;
-		cpu_req_valid = 1'b0;
-		cpu_req_addr = 32'h0;
-
-		assert_test(resp_data == 32'h0000_0013,
-			"Flush correctly squashed output instruction to NOP (0x00000013)");
-
-		clear_axi_monitor();
-		execute_req(32'h800C_0040, resp_data);
-		assert_test(!axi_ar_handshake_seen && (resp_data == 32'h800C_1040),
-			"Flushed line was saved in cache and served as HIT on re-access");
-
-		// TEST 9: FENCE.I Invalidation
-		$display("\n[TEST 9] FENCE.I Invalidation Request");
-		clear_axi_monitor();
-
-		@(negedge clk);
-		fence_i_req = 1'b1;
-
-		timeout = 0;
-		while (!fence_i_done && timeout < 1000) begin
-			@(negedge clk);
-			timeout = timeout + 1;
-		end
-
-		fence_i_req = 1'b0;
-		@(negedge clk);
-
-		clear_axi_monitor();
-		execute_req(32'h8008_0000, resp_data); // Previously cached address
-
-		assert_test(axi_ar_handshake_seen && (axi_last_arlen == 8'd3) && (resp_data == 32'h8008_1000),
-			"FENCE.I forced Cache Miss & Refill on 0x8008_0000");
-
-		// ============================================================
-		// ISSUE-FIX VERIFICATION (fence_i_req / cpu_flush handling)
-		// ============================================================
-		$display("\n--------------------------------------------------------");
-		$display(" ISSUE-FIX VERIFICATION (fence_i_req / cpu_flush)");
-		$display("--------------------------------------------------------");
-
-		// TEST 10: [ISSUE 1] FENCE.I request must be held internally until done
-		$display("\n[TEST 10] FENCE.I req pulse is held internally until done");
-
-		// 10a: 1-cycle fence_i_req pulse while IDLE (req is low long before done)
-		execute_req(32'h8000_0200, resp_data);
-		base_done = fence_done_cnt;
-		@(negedge clk);
-		fence_i_req = 1'b1;
-		@(negedge clk);
-		fence_i_req = 1'b0;
-		wait_fence_done(base_done, 1000);
-		assert_issue(1, fence_done_cnt == base_done + 1,
-			"1-cycle req in IDLE -> FENCE.I completes (done)");
-		wait_cycles(700);
-		assert_issue(1, fence_done_cnt == base_done + 1,
-			"No extra done after 1-cycle req");
-		clear_axi_monitor();
-		execute_req(32'h8000_0200, resp_data);
-		assert_issue(1, axi_ar_handshake_seen && (resp_data == 32'h8000_1200),
-			"Line invalidated after 1-cycle req (re-miss)");
-
-		// 10b: 1-cycle fence_i_req pulse while a miss refill is in flight
-		clear_axi_monitor();
-		base_done = fence_done_cnt;
-		cpu_req_valid = 1'b0;
-		@(negedge clk);
-		cpu_req_valid = 1'b1;
-		cpu_req_addr = 32'h8000_0400;
-
-		timeout = 0;
-		while (!m_axi_arvalid && timeout < 100) begin
-			@(negedge clk);
-			timeout = timeout + 1;
-		end
-
-		fence_i_req = 1'b1;
-		@(negedge clk);
-		fence_i_req = 1'b0;
-
-		timeout = 0;
-		while (!cpu_ready && timeout < 500) begin
-			@(negedge clk);
-			timeout = timeout + 1;
-		end
-		resp_data = cpu_rdata;
-		cpu_req_valid = 1'b0;
-		cpu_req_addr = 32'h0;
-
-		assert_issue(1, resp_data == 32'h8000_1400,
-			"Refill response intact while FENCE.I req is pending");
-		wait_fence_done(base_done, 1000);
-		assert_issue(1, fence_done_cnt == base_done + 1,
-			"1-cycle req during miss is not lost (done)");
-		wait_cycles(700);
-		assert_issue(1, fence_done_cnt == base_done + 1,
-			"No extra done after pending FENCE.I");
-		clear_axi_monitor();
-		execute_req(32'h8000_0400, resp_data);
-		assert_issue(1, axi_ar_handshake_seen && (resp_data == 32'h8000_1400),
-			"Line invalidated by the pending FENCE.I (re-miss)");
-
-		// TEST 11: [ISSUE 2] fence_i_req held high must not re-run FENCE.I
-		$display("\n[TEST 11] FENCE.I req held high after done (no re-execution)");
-		execute_req(32'h8000_0600, resp_data);
-		base_done = fence_done_cnt;
-		base_done_hi = fence_done_hi_cnt;
-		@(negedge clk);
-		fence_i_req = 1'b1;
-		wait_fence_done(base_done, 1000);
-		assert_issue(2, fence_done_cnt == base_done + 1,
-			"FENCE.I completes with req held high");
-		wait_cycles(1500);
-		assert_issue(2, fence_done_cnt == base_done + 1,
-			"No second FENCE.I while req stays high (1500 cycles)");
-		assert_issue(2, fence_done_hi_cnt == base_done_hi + 1,
-			"done is a single 1-cycle pulse");
-		fence_i_req = 1'b0;
-		wait_cycles(3);
-		clear_axi_monitor();
-		execute_req(32'h8000_0600, resp_data);
-		assert_issue(2, axi_ar_handshake_seen && (resp_data == 32'h8000_1600),
-			"Cache resumes after req drops (line was invalidated)");
-		wait_cycles(700);
-		assert_issue(2, fence_done_cnt == base_done + 1,
-			"No FENCE.I re-run after req dropped");
-
-		// TEST 12: [ISSUE 3] cpu_flush while IDLE must be released immediately
-		$display("\n[TEST 12] cpu_flush while IDLE is released immediately");
-
-		// 12a: 1-cycle flush with no request, then a miss
-		wait_cycles(2);
-		cpu_flush = 1'b1;
-		@(negedge clk);
-		cpu_flush = 1'b0;
-		wait_cycles(3);
-		execute_req(32'h8000_0800, resp_data);
-		assert_issue(3, resp_data == 32'h8000_1800,
-			"Miss after IDLE flush is not squashed");
-
-		// 12b: flush in IDLE, request driven in the very next cycle
-		wait_cycles(2);
-		cpu_flush = 1'b1;
-		@(negedge clk);
-		cpu_flush = 1'b0;
-		cpu_req_valid = 1'b1;
-		cpu_req_addr = 32'h8000_0A00;
-		timeout = 0;
-		while (!cpu_ready && timeout < 500) begin
-			@(negedge clk);
-			timeout = timeout + 1;
-		end
-		resp_data = cpu_rdata;
-		cpu_req_valid = 1'b0;
-		cpu_req_addr = 32'h0;
-		@(negedge clk);
-		assert_issue(3, resp_data == 32'h8000_1A00,
-			"Miss right after IDLE flush is not squashed");
-
-		// 12c: hit after IDLE flush
-		wait_cycles(2);
-		cpu_flush = 1'b1;
-		@(negedge clk);
-		cpu_flush = 1'b0;
-		execute_req(32'h8000_0804, resp_data);
-		assert_issue(3, resp_data == 32'h8000_1804,
-			"Hit after IDLE flush is not squashed");
-
-		// TEST 13: [ISSUE 4/5] cpu_flush during a hit is released at the hit response
-		$display("\n[TEST 13] cpu_flush during HIT is released at the hit response");
-
-		// 13a: 1-cycle flush in the LOOKUP cycle of a hit
-		execute_req_flush(32'h8000_0800, 1, 1, resp_data);
-		assert_issue(4, resp_data == 32'h0000_0013,
-			"Hit response squashed to NOP by flush");
-		clear_axi_monitor();
-		execute_req(32'h8000_0C00, resp_data);
-		assert_issue(5, axi_ar_handshake_seen && (resp_data == 32'h8000_1C00),
-			"Next miss after flushed hit is not squashed");
-		clear_axi_monitor();
-		execute_req(32'h8000_0800, resp_data);
-		assert_issue(4, !axi_ar_handshake_seen && (resp_data == 32'h8000_1800),
-			"Next hit after flushed hit is not squashed");
-
-		// 13b: flush held high across the hit response and into IDLE
-		execute_req_flush(32'h8000_0804, 1, 5, resp_data);
-		assert_issue(4, resp_data == 32'h0000_0013,
-			"Hit squashed with multi-cycle flush");
-		clear_axi_monitor();
-		execute_req(32'h8000_0E00, resp_data);
-		assert_issue(5, axi_ar_handshake_seen && (resp_data == 32'h8000_1E00),
-			"Miss after multi-cycle flush is not squashed");
-
-		// TEST 14: [ISSUE 5] flush during a refill must not leak into later requests
-		$display("\n[TEST 14] cpu_flush during MISS refill does not leak into next miss");
-
-		// 14a: flush pulse early in the refill, released before the response
-		execute_req_flush(32'h8000_1000, 2, 3, resp_data);
-		assert_issue(5, resp_data == 32'h0000_0013,
-			"Refill response squashed (flush latched in flight)");
-		clear_axi_monitor();
-		execute_req(32'h8000_1000, resp_data);
-		assert_issue(5, !axi_ar_handshake_seen && (resp_data == 32'h8000_2000),
-			"Squashed refill still allocated the line (HIT)");
-		clear_axi_monitor();
-		execute_req(32'h8000_1400, resp_data);
-		assert_issue(5, axi_ar_handshake_seen && (resp_data == 32'h8000_2400),
-			"Next miss after squashed refill is not squashed");
-
-		// 14b: flush held through the refill response and into IDLE
-		execute_req_flush(32'h8000_1800, 2, 12, resp_data);
-		assert_issue(5, resp_data == 32'h0000_0013,
-			"Refill response squashed (flush held past response)");
-		clear_axi_monitor();
-		execute_req(32'h8000_1C00, resp_data);
-		assert_issue(5, axi_ar_handshake_seen && (resp_data == 32'h8000_2C00),
-			"Next miss after held flush is not squashed");
-
-		$display("\n========================================================");
-		$display(" ISSUE-FIX SUMMARY (PASS = problem is corrected)");
-		$display("========================================================");
-		$display("  [ISSUE 1] fence_i_req held internally until done   : %0s (pass=%0d fail=%0d)",
-			(issue_fail[1] == 0 && issue_pass[1] > 0) ? "PASS" : "FAIL", issue_pass[1], issue_fail[1]);
-		$display("  [ISSUE 2] no FENCE.I re-run while req stays high   : %0s (pass=%0d fail=%0d)",
-			(issue_fail[2] == 0 && issue_pass[2] > 0) ? "PASS" : "FAIL", issue_pass[2], issue_fail[2]);
-		$display("  [ISSUE 3] IDLE cpu_flush released immediately      : %0s (pass=%0d fail=%0d)",
-			(issue_fail[3] == 0 && issue_pass[3] > 0) ? "PASS" : "FAIL", issue_pass[3], issue_fail[3]);
-		$display("  [ISSUE 4] hit-time cpu_flush released at response  : %0s (pass=%0d fail=%0d)",
-			(issue_fail[4] == 0 && issue_pass[4] > 0) ? "PASS" : "FAIL", issue_pass[4], issue_fail[4]);
-		$display("  [ISSUE 5] no stale flush squashing the next miss   : %0s (pass=%0d fail=%0d)",
-			(issue_fail[5] == 0 && issue_pass[5] > 0) ? "PASS" : "FAIL", issue_pass[5], issue_fail[5]);
-
-
-		// ============================================================
-		// COVERAGE EXTENSION (TEST 15 ~ 22)
-		// Closes gaps found by mutation testing of the original suite:
-		// way1 / LRU / tag aliasing / FENCE.I range / bypass / critical word / randomized scoreboard
-		// ============================================================
-		$display("\n--------------------------------------------------------");
-		$display(" COVERAGE EXTENSION (way1, LRU, tag, FENCE.I range, ...)");
-		$display("--------------------------------------------------------");
-
-		// TEST 15: LRU victim selection follows allocation order
-		$display("\n[TEST 15] 2-way LRU: victim follows allocation order (set 101)");
-		check_cached(32'h8000_0CA0, 1'b0, "A miss -> fills way0");
-		check_cached(32'h8004_0CA0, 1'b0, "B miss -> fills way1");
-		check_cached(32'h8008_0CA0, 1'b0, "C miss -> evicts oldest line A");
-		check_cached(32'h8004_0CA0, 1'b1, "B still resident (HIT, way1 data path)");
-		check_cached(32'h8008_0CA0, 1'b1, "C resident (HIT, way0 data path)");
-		check_cached(32'h8000_0CA0, 1'b0, "A was evicted (MISS)");
-
-		// TEST 16: LRU update on hits (way0 hit and way1 hit)
-		$display("\n[TEST 16] 2-way LRU: hit on either way refreshes recency (set 102)");
-		check_cached(32'h8000_0CC0, 1'b0, "A miss (way0)");
-		check_cached(32'h8004_0CC0, 1'b0, "B miss (way1)");
-		check_cached(32'h8000_0CC0, 1'b1, "A hit (way0) -> B becomes LRU");
-		check_cached(32'h8008_0CC0, 1'b0, "C miss evicts B (not A)");
-		check_cached(32'h8000_0CC0, 1'b1, "A survived eviction (HIT)");
-		check_cached(32'h8008_0CC0, 1'b1, "C hit (way1) -> A becomes LRU");
-		check_cached(32'h800C_0CC0, 1'b0, "D miss evicts A (not C)");
-		check_cached(32'h8008_0CC0, 1'b1, "C survived eviction (HIT)");
-		check_cached(32'h8000_0CC0, 1'b0, "A was evicted (MISS)");
-
-		// TEST 17: flush on a way1 hit
-		$display("\n[TEST 17] cpu_flush squashes a HIT served from way1 (set 103)");
-		check_cached(32'h8000_0CE0, 1'b0, "A miss (way0)");
-		check_cached(32'h8004_0CE0, 1'b0, "B miss (way1)");
-		execute_req_flush(32'h8004_0CE0, 1, 1, resp_data);
-		assert_test(resp_data == 32'h0000_0013, "way1 hit squashed to NOP by flush");
-		check_cached(32'h8004_0CE0, 1'b1, "way1 hit after flushed hit is not squashed");
-
-		// TEST 18: critical-word / whole-line refill (miss at every word offset, then read the full line)
-		$display("\n[TEST 18] Miss at every word offset, then read back the whole line");
-		begin : T18
-			integer k, w, f_miss, f_hit;
-			reg [31:0] line_base;
-			f_miss = 0;
-			f_hit = 0;
-			for (k = 0; k < 8; k = k + 1) begin
-				line_base = 32'h8000_0000 + ((300 + k) * 32);
-				check_cached_quiet(line_base + (k * 4), 1'b0, f_miss);
-				for (w = 0; w < 8; w = w + 1)
-					check_cached_quiet(line_base + (w * 4), 1'b1, f_hit);
+			stream_pos = 0;
+			stream_len = 65;
+			t_start = cycle_count;
+			while (stream_pos < 65) begin
+				@(negedge clk);
+				if (cpu_busy) busy_seen = busy_seen + 1;
 			end
-			assert_test(f_miss == 0, "Miss at word offset 0..7: data, ARADDR(line aligned), ARLEN=3");
-			assert_test(f_hit == 0, "All 8 words of every refilled line read back correctly (HIT)");
+			t_end = cycle_count;
+			wait_stream_done;
+			$display("     64 fetches in %0d cycles (%0d.%02d clk/fetch)", t_end - t_start - 1,
+				(t_end - t_start - 1) / 64, ((t_end - t_start - 1) % 64) * 100 / 64);
+			check(t_end - t_start - 1 == 64, "hits only : 1.00 clk/fetch");
+			check(busy_seen == 0 && ar_count == ar_before, "no cpu_busy and no AXI access on hits");
+			check_no_mismatch("hit data", before);
 		end
 
-		// TEST 19: bypass path
-		$display("\n[TEST 19] Bypass: upper word, no allocation, cacheable region boundaries");
-		check_bypass(32'h0000_0104, "Bypass upper word (offset[2]=1), ARADDR 8B aligned");
-		check_bypass(32'h0000_0104, "Bypass is not allocated (second access goes to AXI again)");
-		check_bypass(32'h7FFF_FFFC, "0x7FFF_FFFC is below DDR window -> bypass");
-		check_cached(32'h9FFF_FFFC, 1'b0, "0x9FFF_FFFC is inside DDR window -> cached refill");
-		check_bypass(32'hA000_0000, "0xA000_0000 is above DDR window -> bypass");
-		check_bypass(32'h4000_0000, "0x4000_0000 -> bypass");
-
-		// TEST 20: every tag bit participates in the compare (no aliasing)
-		$display("\n[TEST 20] Tag compare: lines differing in a single tag bit never alias");
-		begin : T20
-			integer k, f;
-			reg [31:0] a0, a1;
-			f = 0;
-			for (k = 14; k <= 28; k = k + 1) begin
-				a0 = 32'h8000_0000 | ((200 + (k - 14)) << 5);
-				a1 = a0 ^ (32'h1 << k);
-				check_cached_quiet(a0, 1'b0, f);
-				check_cached_quiet(a1, 1'b0, f); // must be a MISS with its own data
-				check_cached_quiet(a0, 1'b1, f);
-				check_cached_quiet(a1, 1'b1, f);
-			end
-			assert_test(f == 0, "addr[28:14] each distinguish lines in the same set (15 bits x 2 ways)");
+		// --------------------------------------------------------------------
+		if (CACHE_EN != 0) begin
+			$display("\n[T-I03] LRU and victim choice (A, B, C in one set)");
+			do_reset;
+			base = 32'h8000_0040;
+			stream[0] = base; // A miss -> way 0 (invalid first)
+			stream[1] = base + WAY_BYTES; // B miss -> way 1
+			stream[2] = base; // A hit (B is LRU)
+			stream[3] = base + 2 * WAY_BYTES; // C miss -> evicts B
+			stream[4] = base; // A hit
+			stream[5] = base + WAY_BYTES; // B miss -> evicts C
+			stream[6] = base + 2 * WAY_BYTES; // C miss -> evicts A
+			stream[7] = base + WAY_BYTES; // B hit
+			stream[8] = base; // A miss
+			before = error_count;
+			ar_before = ar_count;
+			run_stream(9);
+			check_no_mismatch("every fetch follows the reference model (invalid way first, then LRU)", before);
+			check(ar_count - ar_before == 6, "6 refills, 3 hits");
 		end
 
-		// TEST 21: FENCE.I invalidates every set and both ways
-		$display("\n[TEST 21] FENCE.I invalidates all sets / both ways (sets 0,1,255,256,257,510,511)");
-		begin : T21
-			integer s, f_pre, f_hit, f_post;
-			integer sets [0:6];
-			reg [31:0] l0, l1;
-			sets[0] = 0; sets[1] = 1; sets[2] = 255; sets[3] = 256;
-			sets[4] = 257; sets[5] = 510; sets[6] = 511;
-			f_pre = 0; f_hit = 0; f_post = 0;
-			for (s = 0; s < 7; s = s + 1) begin
-				l0 = 32'h8010_0000 | (sets[s] << 5);
-				l1 = 32'h8014_0000 | (sets[s] << 5);
-				check_cached_quiet(l0, 1'b0, f_pre);
-				check_cached_quiet(l1, 1'b0, f_pre);
-				check_cached_quiet(l0, 1'b1, f_hit);
-				check_cached_quiet(l1, 1'b1, f_hit);
-			end
-			do_fence;
-			for (s = 0; s < 7; s = s + 1) begin
-				l0 = 32'h8010_0000 | (sets[s] << 5);
-				l1 = 32'h8014_0000 | (sets[s] << 5);
-				check_cached_quiet(l0, 1'b0, f_post);
-				check_cached_quiet(l1, 1'b0, f_post);
-			end
-			assert_test(f_pre == 0 && f_hit == 0, "Both ways of all 7 sets were populated before FENCE.I");
-			assert_test(f_post == 0, "After FENCE.I every line (way0 & way1, low & high sets) re-misses");
+		// --------------------------------------------------------------------
+		$display("\n[T-I04 / T-I05] AXI attributes, random slave latency");
+		$display("     (AR attributes, ARVALID hold, one burst at a time, RREADY gating are checked on every edge)");
+		set_quiet;
+		latency_max = 8;
+		for (k = 0; k < 256; k = k + 1) stream[k] = 32'h8000_2000 + k * 4;
+		before = error_count;
+		run_stream(256);
+		check_no_mismatch("256 sequential fetches with random AR / R wait", before);
+
+		// --------------------------------------------------------------------
+		$display("\n[T-I06] FENCE.I");
+		set_quiet;
+		do_reset;
+		for (k = 0; k < 8; k = k + 1) stream[k] = 32'h8000_3000 + k * 4;
+		stream[8] = 32'h8000_3040; // held at the output during the FENCE.I (refetched after it)
+		run_stream(9);
+		// idle cache : req -> done
+		@(negedge clk);
+		fence_req = 1'b1;
+		fence_cycles = 0;
+		busy_seen = 0;
+		k = fence_done_count;
+		while (fence_done_count == k) begin
+			@(negedge clk);
+			fence_cycles = fence_cycles + 1;
+			if (fence_req && !cpu_busy) busy_seen = busy_seen + 1;
+		end
+		check(fence_cycles == NUM_SETS + 3, "req to done sampled : NUM_SETS + 2 cycles in the cache");
+		$display("     %0d cycles from req to the edge that saw done", fence_cycles);
+		check(busy_seen == 0, "cpu_busy stays 1 until req drops");
+		// new memory contents are seen after the invalidation
+		wait_stream_done; // the fetch held at the output is read again first
+		set_memory_word(32'h8000_3008, 32'hCAFE_0001);
+		stream[0] = 32'h8000_3008;
+		before = error_count;
+		ar_before = ar_count;
+		run_stream(1);
+		check(ar_count - ar_before == 1 && cpu_rdata == 32'hCAFE_0001,
+			"after FENCE.I the line is read again and the new word is returned");
+		check_no_mismatch("data after FENCE.I", before);
+		// req raised while a refill is on the bus : the refill finishes first
+		set_quiet;
+		latency_max = 12;
+		stream[0] = 32'h8000_3100;
+		@(negedge clk);
+		ar_before = ar_count;
+		refill_before = burst_done_count;
+		stream_pos = 0;
+		stream_len = 1;
+		while (ar_count == ar_before) @(negedge clk);
+		fence_req = 1'b1;
+		k = fence_done_count;
+		before = error_count;
+		wait_stream_done;
+		check(fence_done_count == k + 1, "one done for a req raised during a refill");
+		check(ar_count - ar_before == ((CACHE_EN != 0) ? 2 : 1),
+			CACHE_EN != 0 ? "refill finished, line invalidated, fetched again" : "bypass finished before the FENCE.I");
+		check_no_mismatch("fetch around FENCE.I", before);
+		// back-to-back requests (req low for one cycle between them)
+		k = fence_done_count;
+		for (ar_before = 0; ar_before < 3; ar_before = ar_before + 1) begin
+			@(negedge clk);
+			fence_req = 1'b1;
+			while (fence_req) @(negedge clk);
+		end
+		check(fence_done_count == k + 3, "3 requests with 1 low cycle between them -> 3 done pulses");
+
+		// --------------------------------------------------------------------
+		$display("\n[T-I07] NUM_SETS=%0d : index [%0d:5], tag [31:%0d], way size %0d bytes",
+			NUM_SETS, 4 + INDEX_BITS, 5 + INDEX_BITS, WAY_BYTES);
+		if (CACHE_EN != 0) begin
+			set_quiet;
+			do_reset;
+			// same index, different tags -> one set; next index -> another set
+			stream[0] = 32'h8000_0000;
+			stream[1] = 32'h8000_0000 + WAY_BYTES;
+			stream[2] = 32'h8000_0000 + 32;
+			stream[3] = 32'h8000_0000;
+			stream[4] = 32'h8000_0000 + WAY_BYTES;
+			stream[5] = 32'h8000_0000 + 32;
+			before = error_count;
+			ar_before = ar_count;
+			run_stream(6);
+			check(ar_count - ar_before == 3, "addresses WAY_BYTES apart share a set, the next line does not");
+			check_no_mismatch("index / tag split", before);
 		end
 
-		// TEST 22: flush arriving in the same cycle as the request (documented InstructionCache behaviour)
-		$display("\n[TEST 22] cpu_flush concurrent with request acceptance squashes that request");
-		check_cached(32'h8000_0D00, 1'b0, "prime line (set 104)");
-		execute_req_flush(32'h8000_0D00, 0, 1, resp_data);
-		assert_test(resp_data == 32'h0000_0013, "flush in the accept cycle -> response squashed to NOP");
-		check_cached(32'h8000_0D20, 1'b0, "next request is not squashed");
+		// --------------------------------------------------------------------
+		$display("\n[T-I08] not cacheable : single-beat bypass, never allocated");
+		set_quiet;
+		stream[0] = 32'h0000_1234 & 32'hFFFF_FFFC;
+		stream[1] = 32'h0000_1234 & 32'hFFFF_FFFC;
+		stream[2] = 32'h0000_1238;
+		before = error_count;
+		ar_before = ar_count;
+		run_stream(3);
+		check(ar_count - ar_before == 3, "3 fetches outside the cacheable region -> 3 AXI reads");
+		check_no_mismatch("bypass data (ARLEN = 0, 8-byte aligned)", before);
 
-		// TEST 23: randomized scoreboard against a reference model
-		$display("\n[TEST 23] Randomized scoreboard vs. reference model (hit/miss, LRU, data, AXI)");
-		axi_stress = 1'b0;
-		rand_scoreboard(2000, 32'h00C0_FFEE);
-		$display("     requests=%0d hit=%0d miss=%0d bypass=%0d fence=%0d mismatch=%0d",
-			sb_req, sb_hit, sb_miss, sb_byp, sb_fence, sb_mism);
-		assert_test(sb_mism == 0 && sb_hit > 100 && sb_miss > 100, "Scoreboard, fixed-latency AXI slave");
-
-		axi_stress = 1'b1;
-		rand_scoreboard(2000, 32'h0BAD_5EED);
-		$display("     requests=%0d hit=%0d miss=%0d bypass=%0d fence=%0d mismatch=%0d",
-			sb_req, sb_hit, sb_miss, sb_byp, sb_fence, sb_mism);
-		assert_test(sb_mism == 0 && sb_hit > 100 && sb_miss > 100, "Scoreboard, random ARREADY delay + RVALID gaps");
-		axi_stress = 1'b0;
-
-		// TEST 24: flush / FENCE.I arriving in every in-flight phase of a request
-		// (TEST 8/10b/14 only inject while ARVALID is high; LOOKUP and the R burst were uncovered)
-		$display("\n[TEST 24] flush / FENCE.I latched in every in-flight phase (LOOKUP, AR, R burst, bypass)");
-		check_flush_in_phase(32'h8020_0F0C, 32'h8020_0F2C, PH_LOOKUP,   "flush in miss LOOKUP cycle -> refill squashed to NOP");
-		check_flush_in_phase(32'h8020_0F4C, 32'h8020_0F6C, PH_ADDR,     "flush while ARVALID (ALLOC_AR) -> refill squashed to NOP");
-		check_flush_in_phase(32'h8020_0F8C, 32'h8020_0FAC, PH_DATA_MID, "flush during R burst (ALLOC_R) -> refill squashed to NOP");
-		check_fence_in_phase(32'h8020_100C, PH_LOOKUP,   "FENCE.I in miss LOOKUP cycle -> refill data intact");
-		check_fence_in_phase(32'h8020_102C, PH_ADDR,     "FENCE.I while ARVALID (ALLOC_AR) -> refill data intact");
-		check_fence_in_phase(32'h8020_104C, PH_DATA_MID, "FENCE.I during R burst (ALLOC_R) -> refill data intact");
-		begin : T24_BYPASS
-			reg inj;
-			clear_axi_monitor();
-			execute_req_inject(32'h0000_0204, PH_LOOKUP, 1'b0, resp_data, inj);
-			assert_test(inj && axi_ar_handshake_seen && (resp_data === 32'h0000_0013), "flush in bypass LOOKUP cycle -> NOP");
-			check_bypass(32'h0000_0304, "  ...next bypass is not squashed");
-			clear_axi_monitor();
-			execute_req_inject(32'h0000_0204, PH_ADDR, 1'b0, resp_data, inj);
-			assert_test(inj && axi_ar_handshake_seen && (resp_data === 32'h0000_0013), "flush while ARVALID (BYPASS_AR) -> NOP");
-			check_bypass(32'h0000_0304, "  ...next bypass is not squashed");
+		// --------------------------------------------------------------------
+		$display("\n[T-I09] AXI errors");
+		set_quiet;
+		do_reset;
+		before = error_count;
+		k = error_fetch_count;
+		// SLVERR on beat 2 of a refill
+		force_error_mode = 2'd1;
+		force_error_beat = (CACHE_EN != 0) ? 2'd2 : 2'd0;
+		stream[0] = 32'h8000_4004;
+		ar_before = ar_count;
+		run_stream(1);
+		check(cpu_error === 1'b1, "SLVERR : fetch ends with cpu_error");
+		repeat (5) @(negedge clk);
+		check(cpu_error === 1'b1 && cpu_busy === 1'b0, "cpu_error stays high until the next fetch_advance");
+		stream[0] = 32'h8000_4004;
+		stream[1] = 32'h8000_4008;
+		run_stream(2);
+		check(ar_count - ar_before == (CACHE_EN != 0 ? 2 : 3) && cpu_error === 1'b0,
+			CACHE_EN != 0 ? "line was not kept : refetch misses, then hits" : "bypass refetch is clean");
+		// RLAST on beat 1
+		if (CACHE_EN != 0) begin
+			force_error_mode = 2'd2;
+			force_error_beat = 2'd1;
+			stream[0] = 32'h8000_4104;
+			run_stream(1);
+			check(cpu_error === 1'b1, "RLAST early : the refill ends there with cpu_error");
+			stream[0] = 32'h8000_411C;
+			ar_before = ar_count;
+			run_stream(1);
+			check(ar_count - ar_before == 1 && cpu_error === 1'b0, "the short line is not used : next word of it misses");
+		end
+		// RLAST never asserted
+		force_error_mode = 2'd3;
+		force_error_beat = 2'd0;
+		stream[0] = 32'h8000_4200;
+		run_stream(1);
+		check(cpu_error === 1'b1, "RLAST missing : the refill ends on the 4th beat with cpu_error");
+		check_no_mismatch("error handling matches the model", before);
+		// error on the victim way : the old line of that way is gone
+		if (CACHE_EN != 0) begin
+			do_reset;
+			stream[0] = 32'h8000_4300;
+			stream[1] = 32'h8000_4300 + WAY_BYTES;
+			run_stream(2); // both ways valid, way 0 is LRU
+			force_error_mode = 2'd1;
+			force_error_beat = 2'd0;
+			stream[0] = 32'h8000_4300 + 2 * WAY_BYTES; // evicts way 0 and fails
+			stream[1] = 32'h8000_4300 + WAY_BYTES; // still a hit
+			stream[2] = 32'h8000_4300; // was evicted
+			before = error_count;
+			ar_before = ar_count;
+			run_stream(3);
+			check(ar_count - ar_before == 2, "failed refill leaves its way invalid, the other way still hits");
+			check_no_mismatch("victim after a failed refill", before);
 		end
 
-		// same in-flight injections with the stressed AXI slave (ARREADY delay / RVALID gaps)
-		axi_stress = 1'b1;
-		check_flush_in_phase(32'h8024_0F8C, 32'h8024_0FAC, PH_DATA_MID, "[stress] flush during R burst -> refill squashed to NOP");
-		check_fence_in_phase(32'h8024_104C, PH_DATA_MID, "[stress] FENCE.I during R burst -> refill data intact");
-		axi_stress = 1'b0;
-
-		$display("\n========================================================");
-		$display("SIMULATION FINISHED");
-		$display("PASS: %0d", test_pass_count);
-		$display("FAIL: %0d", test_fail_count);
-		$display("========================================================");
-
-		if (test_fail_count == 0 && test_pass_count > 0) begin
-			$display(">>> ALL TEST CASES PASSED SUCCESSFULLY! <<<");
-			$finish;
-		end else begin
-			$display(">>> SIMULATION FAILED WITH ERRORS! <<<");
-			// non-zero vvp exit code so scripts / CI detect the failure ($finish always exits 0)
-			$fatal(1, "Instruction cache TB: %0d test(s) failed", test_fail_count);
+		// --------------------------------------------------------------------
+		$display("\n[T-I10] reset during a refill, clk_enable toggling");
+		set_quiet;
+		latency_max = 4;
+		stream[0] = 32'h8000_5000;
+		run_stream(1);
+		stream[0] = 32'h8000_5040;
+		@(negedge clk);
+		k = burst_done_count;
+		ar_before = ar_count;
+		stream_pos = 0;
+		stream_len = 1;
+		while (!(burst_open && burst_beats >= 1) && burst_done_count == k) @(negedge clk);
+		reset = 1'b1;
+		stream_len = 0;
+		stream_pos = 0;
+		repeat (2) @(negedge clk);
+		check(cpu_rdata === NOP && cpu_busy === 1'b0, "during reset : cpu_rdata = NOP, cpu_busy = 0");
+		reset = 1'b0;
+		reference_reset;
+		@(negedge clk);
+		check(cpu_rdata === NOP && cpu_busy === 1'b0 && m_axi_arvalid === 1'b0, "after reset : no request, NOP, idle bus");
+		stream[0] = 32'h8000_5000;
+		stream[1] = 32'h8000_5040;
+		before = error_count;
+		ar_before = ar_count;
+		run_stream(2);
+		check(ar_count - ar_before == 2, "every line is invalid after reset (both fetches miss)");
+		check_no_mismatch("fetches after reset", before);
+		// clk_enable toggling with a slave that ignores clk_enable and one that follows it
+		for (k = 0; k < 2; k = k + 1) begin
+			set_quiet;
+			slave_gated = k;
+			latency_max = 6;
+			clk_enable_rate = 2;
+			for (t_start = 0; t_start < 512; t_start = t_start + 1) stream[t_start] = random_address(1'b0);
+			before = error_count;
+			run_stream(512);
+			clk_enable_rate = 0;
+			check_no_mismatch(k ? "clk_enable 50% off, slave gated by clk_enable" : "clk_enable 50% off, slave not gated (AR taken on any edge)", before);
 		end
+
+		// --------------------------------------------------------------------
+		$display("\n[T-I12] performance counters");
+		set_quiet;
+		do_reset;
+		clear_perf;
+		stall_rate = 3;
+		for (k = 0; k < 300; k = k + 1) stream[k] = 32'h8000_6000 + (k % 100) * 4;
+		run_stream(300);
+		stall_rate = 0;
+		repeat (2) @(negedge clk);
+		check_perf("access / miss / stall after 300 fetches");
+		if (CACHE_EN != 0) check(perf_access != 0 && perf_miss == 13, "counters are counting (13 lines for 100 words)");
+		else check(perf_access == 0 && perf_miss == 0, "CACHE_EN=0 : bypass fetches are not counted as access / miss");
+		$display("     access=%0d miss=%0d stall=%0d", perf_access, perf_miss, perf_stall);
+		clear_perf;
+		check(perf_access == 0 && perf_miss == 0 && perf_stall == 0, "perf_clear zeroes all counters");
+
+		// --------------------------------------------------------------------
+		random_phase("T-I11 TB slave, gated, clk_enable 25% off, errors, FENCE.I", 1'b0, 1'b1, 4, 16, 500);
+		random_phase("T-I11 TB slave, not gated, clk_enable 25% off, errors", 1'b0, 1'b0, 4, 16, 1000);
+		random_phase("T-I11 TB slave, clk_enable on, no errors, FENCE.I", 1'b0, 1'b0, 0, 0, 2000);
+		random_phase("T-I11 DummyDDRMemory, SLVERR window, clk_enable 25% off", 1'b1, 1'b0, 4, 0, 1000);
+
+		$display("\n==================================================================");
+		$display(" fetches checked: %0d, protocol / data / model mismatches: %0d", completed_count, error_count);
+		$display(" PASS: %0d", pass_count);
+		$display(" FAIL: %0d", fail_count);
+		$display("==================================================================");
+		if (fail_count != 0 || error_count != 0) $fatal(1, "InstructionCache_tb: %0d failure(s)", fail_count);
+		$finish;
 	end
 
 endmodule

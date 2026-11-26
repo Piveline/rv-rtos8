@@ -1,11 +1,26 @@
 `timescale 1ns / 1ps
 
+`ifdef HAS_ICACHE
+`include "./modules/Dummy_DDR_Memory.v"
+`endif
+
 module RV32IM54F_8SP_core_tb;
     parameter XLEN = 32;
+    // I-Cache configuration (used only when compiled with -DHAS_ICACHE)
+    parameter ICACHE_SETS = 128;
+    parameter ICACHE_EN = 1;
+    parameter DDR_READ_LATENCY = 60;
+    // Where each program runs. 0 : Boot ROM as written (the original core layout).
+    // Otherwise ROM word 0 is "jalr x0, 0(x30)" with x30 = PROGRAM_BASE and the program is
+    // copied there: 0x0000_1000 = Boot ROM (uncached), 0x8000_1000 = DDR (through the I-Cache).
+    // Traces print pc[28:0], so a ROM run and a DDR run of the same program compare line by line.
+    parameter [31:0] PROGRAM_BASE = 32'h0000_0000;
 
     localparam [XLEN-1:0] DONE_ADDR = 32'h1001_0000;
     localparam integer    TIMEOUT   = 5000;
     localparam [31:0]     HALT      = 32'h0000_006F;   // jal x0, 0
+    localparam [31:0] JALR_X30 = 32'h000F_0067; // jalr x0, 0(x30)
+    localparam DDR_PROGRAM = PROGRAM_BASE[31];
 
     reg clk;
     reg reset;
@@ -24,13 +39,52 @@ module RV32IM54F_8SP_core_tb;
     integer cycles_noalias;
     reg done;
 
+`ifdef HAS_ICACHE
+    wire [31:0] instruction_cache_araddr;
+    wire [7:0] instruction_cache_arlen;
+    wire [2:0] instruction_cache_arsize;
+    wire [1:0] instruction_cache_arburst;
+    wire instruction_cache_arvalid;
+    wire instruction_cache_arready;
+    wire [63:0] instruction_cache_rdata;
+    wire [1:0] instruction_cache_rresp;
+    wire instruction_cache_rlast;
+    wire instruction_cache_rvalid;
+    wire instruction_cache_rready;
+
+    RV32IM54F8SP #(.XLEN(XLEN), .ICACHE_NUM_SETS(ICACHE_SETS), .ICACHE_EN(ICACHE_EN)) dut (
+`else
     RV32IM54F8SP #(.XLEN(XLEN)) dut (
+`endif
         .clk(clk),
         .clk_enable(1'b1),
         .reset(reset),
         .UART_busy(1'b0),
         .timer_interrupt_pending(1'b0),
         .MMIO_read_data({XLEN{1'b0}}),
+        // data cache AXI4 master: these programs make no DDR data access
+        .data_cache_m_axi_awready(1'b0),
+        .data_cache_m_axi_wready(1'b0),
+        .data_cache_m_axi_bresp(2'b00),
+        .data_cache_m_axi_bvalid(1'b0),
+        .data_cache_m_axi_arready(1'b0),
+        .data_cache_m_axi_rdata(64'h0),
+        .data_cache_m_axi_rresp(2'b00),
+        .data_cache_m_axi_rlast(1'b0),
+        .data_cache_m_axi_rvalid(1'b0),
+`ifdef HAS_ICACHE
+        .instruction_cache_m_axi_arready(instruction_cache_arready),
+        .instruction_cache_m_axi_rdata(instruction_cache_rdata),
+        .instruction_cache_m_axi_rresp(instruction_cache_rresp),
+        .instruction_cache_m_axi_rlast(instruction_cache_rlast),
+        .instruction_cache_m_axi_rvalid(instruction_cache_rvalid),
+        .instruction_cache_m_axi_araddr(instruction_cache_araddr),
+        .instruction_cache_m_axi_arlen(instruction_cache_arlen),
+        .instruction_cache_m_axi_arsize(instruction_cache_arsize),
+        .instruction_cache_m_axi_arburst(instruction_cache_arburst),
+        .instruction_cache_m_axi_arvalid(instruction_cache_arvalid),
+        .instruction_cache_m_axi_rready(instruction_cache_rready),
+`endif
 
         .retire_instruction(retire_instruction),
         .MMIO_data_memory_write_data(MMIO_data_memory_write_data),
@@ -38,8 +92,68 @@ module RV32IM54F_8SP_core_tb;
         .MMIO_data_memory_write_enable(MMIO_data_memory_write_enable)
     );
 
+`ifdef HAS_ICACHE
+    // DDR window 0x8000_0000 ~ 0x8001_FFFF (128KB), read only for the I-Cache
+    DummyDDRMemory #(
+        .ADDRESS_WIDTH(14),
+        .READ_LATENCY(DDR_READ_LATENCY)
+    ) dummy_ddr_memory (
+        .clk(clk),
+        .reset(reset),
+        .s_axi_awaddr(32'h0),
+        .s_axi_awlen(8'd0),
+        .s_axi_awsize(3'd0),
+        .s_axi_awburst(2'd0),
+        .s_axi_awvalid(1'b0),
+        .s_axi_awready(),
+        .s_axi_wdata(64'h0),
+        .s_axi_wstrb(8'h0),
+        .s_axi_wlast(1'b0),
+        .s_axi_wvalid(1'b0),
+        .s_axi_wready(),
+        .s_axi_bresp(),
+        .s_axi_bvalid(),
+        .s_axi_bready(1'b0),
+        .s_axi_araddr(instruction_cache_araddr),
+        .s_axi_arlen(instruction_cache_arlen),
+        .s_axi_arsize(instruction_cache_arsize),
+        .s_axi_arburst(instruction_cache_arburst),
+        .s_axi_arvalid(instruction_cache_arvalid),
+        .s_axi_arready(instruction_cache_arready),
+        .s_axi_rdata(instruction_cache_rdata),
+        .s_axi_rresp(instruction_cache_rresp),
+        .s_axi_rlast(instruction_cache_rlast),
+        .s_axi_rvalid(instruction_cache_rvalid),
+        .s_axi_rready(instruction_cache_rready)
+    );
+
+    initial begin
+        for (i = 0; i < 16384; i = i + 1)
+            dummy_ddr_memory.memory[i] = {HALT, HALT};
+    end
+`endif
+
     initial clk = 1'b0;
     always #5 clk = ~clk;
+
+`ifdef HAS_ICACHE
+    wire core_cycle = !dut.cache_stall; // pipeline cycles (cache miss stall cycles are not counted)
+`else
+    wire core_cycle = 1'b1;
+`endif
+
+`ifdef TRACE
+    // Per-core-cycle state trace (compare a cached build against the baseline core)
+    always @(posedge clk) begin
+        if (!reset && core_cycle)
+            $display("T pc=%h ipc=%h IO=%h ID=%h EXR=%h EX=%h EX2=%h MEM=%h WB=%h trp=%b st=%h tdone=%b csr=%b wd=%b ifs=%b fr=%b x5=%h x6=%h x9=%h",
+                     dut.pc & 32'h1FFF_FFFF, dut.instruction_pc & 32'h1FFF_FFFF, dut.IO_instruction, dut.ID_instruction, dut.EXR_instruction,
+                     dut.EX_instruction, dut.EX2_instruction, dut.MEM_instruction, dut.WB_instruction,
+                     dut.trapped, dut.trap_status, dut.trap_done, dut.csr_ready, dut.write_done,
+                     dut.IF_IO_stall, dut.if_io_register.flush_reg,
+                     dut.register_file.registers[5], dut.register_file.registers[6], dut.register_file.registers[9]);
+    end
+`endif
 
     // Every program ends with a store to DONE_ADDR
     always @(posedge clk) begin
@@ -48,6 +162,92 @@ module RV32IM54F_8SP_core_tb;
         else if (MMIO_data_memory_write_enable && MMIO_data_memory_address == DONE_ADDR)
             done <= 1'b1;
     end
+
+    // Self-modifying-code backdoor: a store to PATCH_ADDR rewrites IM word 16 (0x0040)
+    // (stores cannot reach the instruction memory, so the TB patches it)
+    localparam [XLEN-1:0] PATCH_ADDR = 32'h1001_0008;
+    reg patch_en;
+    initial patch_en = 1'b0;
+    // second backdoor: a store to PATCH2_ADDR rewrites IM word 5 (0x0014)
+    localparam [XLEN-1:0] PATCH2_ADDR = 32'h1001_0010;
+    always @(posedge clk) begin
+        if (patch_en && MMIO_data_memory_write_enable && MMIO_data_memory_address == PATCH_ADDR)
+            write_program_word(16, 32'h00200513);   // addi x10,x0,2
+        if (patch_en && MMIO_data_memory_write_enable && MMIO_data_memory_address == PATCH2_ADDR)
+            write_program_word(5, 32'h00200613);    // addi x12,x0,2
+    end
+
+    // Word n of the running program (at PROGRAM_BASE)
+    task write_program_word;
+        input integer n;
+        input [31:0] value;
+        integer word;
+        begin
+            word = (PROGRAM_BASE & 32'h1FFF_FFFF) / 4 + n;
+            if (DDR_PROGRAM) begin
+`ifdef HAS_ICACHE
+                if (word % 2)
+                    dummy_ddr_memory.memory[word / 2][63:32] = value;
+                else
+                    dummy_ddr_memory.memory[word / 2][31:0] = value;
+`endif
+            end
+            else
+                dut.instruction_memory.data[word] = value;
+        end
+    endtask
+
+    // The load_* tasks write the program at ROM word 0; move it to PROGRAM_BASE
+    task place_program;
+        begin
+            if (PROGRAM_BASE != 32'h0) begin
+                for (i = 0; i < 1024; i = i + 1)
+                    write_program_word(i, dut.instruction_memory.data[i]);
+                for (i = 0; i < 1024; i = i + 1)
+                    dut.instruction_memory.data[i] = HALT;
+                dut.instruction_memory.data[0] = JALR_X30;
+                dut.register_file.registers[30] = PROGRAM_BASE;
+            end
+        end
+    endtask
+
+    // I-Cache FENCE.I done pulses since the last reset
+    integer fence_done_count;
+    always @(posedge clk) begin
+        if (reset)
+            fence_done_count <= 0;
+`ifdef HAS_ICACHE
+        else if (dut.instruction_cache.fence_i_done)
+            fence_done_count <= fence_done_count + 1;
+`endif
+    end
+
+    // FENCE.I ordering check (white box): the I-Cache invalidation must never start while an
+    // older store in MEM has not done its memory write yet.
+    //   store_unwritten : DataMemory has a store whose write cycle has not happened
+    //   fi_violations   : FENCE.I FSM left IDLE (fence_i_req raised) with store_unwritten (whole run)
+    //   fi_held         : cycles a FENCE.I sat in EX2 behind such a store (per program; proves
+    //                     the ordering case is actually exercised)
+    integer fi_violations;
+    integer fi_held;
+    initial fi_violations = 0;
+`ifdef HAS_ICACHE
+    wire store_unwritten = dut.data_memory.write_enable && !dut.data_memory.write_phase;
+    always @(posedge clk) begin
+        if (reset)
+            fi_held <= 0;
+        else begin
+            if (dut.fi_state == 2'd0 && dut.instruction_cache_fence_i_req && store_unwritten) begin
+                fi_violations <= fi_violations + 1;
+                $display("[TB]   FENCE.I ordering violation at %0t: invalidation started before the store in MEM was written", $time);
+            end
+            if (dut.fi_state == 2'd0 && dut.EX2_is_fence_i && store_unwritten)
+                fi_held <= fi_held + 1;
+        end
+    end
+`else
+    always @(posedge clk) if (reset) fi_held <= 0;
+`endif
 
     task clear_imem;
         begin
@@ -601,19 +801,31 @@ module RV32IM54F_8SP_core_tb;
     // Reset the core, run the loaded program until it stores to DONE_ADDR
     task run_program;
         input [8*24-1:0] name;
+        integer clocks;
+        integer wait_clocks;
         begin
+            place_program;
             reset = 1'b1;
             repeat (5) @(posedge clk);
             #1;
             reset = 1'b0;
 
+            // cycles counts core cycles (cache miss stall cycles are not counted)
             cycles = 0;
-            while (!done && cycles < TIMEOUT) begin
+            clocks = 0;
+            while (!done && cycles < TIMEOUT && clocks < TIMEOUT * 100) begin
                 @(posedge clk);
-                cycles = cycles + 1;
+                if (core_cycle) cycles = cycles + 1;
+                clocks = clocks + 1;
             end
-            // let older instructions finish writing back
-            repeat (10) @(posedge clk);
+            // let older instructions finish writing back (10 core cycles)
+            i = 0;
+            wait_clocks = 0;
+            while (i < 10 && wait_clocks < 10000) begin
+                @(posedge clk);
+                if (core_cycle) i = i + 1;
+                wait_clocks = wait_clocks + 1;
+            end
             #1;
 
             if (!done) begin
@@ -623,8 +835,69 @@ module RV32IM54F_8SP_core_tb;
                          test_count, name, DONE_ADDR, TIMEOUT);
             end
             else begin
-                $display("[TB]   %0s finished in %0d cycles", name, cycles);
+                $display("[TB]   %0s finished in %0d cycles (%0d clocks)", name, cycles, clocks);
             end
+        end
+    endtask
+    // FENCE.I must not restart the program (x8 counts passes through 0x0004)
+    task load_fencei_restart;
+        begin
+            clear_imem;
+            dut.instruction_memory.data[0] = 32'h10010fb7;   // 0000: lui x31,0x10010
+            dut.instruction_memory.data[1] = 32'h00140413;   // 0004: addi x8,x8,1
+            dut.instruction_memory.data[2] = 32'h00000013;   // 0008: nop
+            dut.instruction_memory.data[3] = 32'h00000013;   // 000c: nop
+            dut.instruction_memory.data[4] = 32'h0000100f;   // 0010: fence.i
+            dut.instruction_memory.data[5] = 32'h00200313;   // 0014: li x6,2
+            dut.instruction_memory.data[6] = 32'h00300393;   // 0018: li x7,3
+            for (i = 7; i < 14; i = i + 1)
+                dut.instruction_memory.data[i] = 32'h00000013;   // 001c..0034: nop
+            dut.instruction_memory.data[14] = 32'h000fa023;  // 0038: sw x0,0(x31)
+            dut.instruction_memory.data[15] = 32'h0000006f;  // 003c: j .
+        end
+    endtask
+
+    // F() at 0x40 returns 1; the TB patches it to return 2 before the second call.
+    // with_fence = 1: fence.i between the patch and the second call -> x12 = 2
+    // with_fence = 0: control (x12 = 1 with an I-Cache: the stale line is still cached)
+    task load_fencei_smc;
+        input with_fence;
+        begin
+            clear_imem;
+            dut.instruction_memory.data[0]  = 32'h10010fb7;   // 0000: lui x31,0x10010
+            dut.instruction_memory.data[1]  = 32'h03c000ef;   // 0004: jal x1,0x40     (caches line 0x40)
+            dut.instruction_memory.data[2]  = 32'h00050593;   // 0008: mv x11,x10      (x11 = 1)
+            dut.instruction_memory.data[3]  = 32'h000fa423;   // 000c: sw x0,8(x31)    (TB patches F)
+            dut.instruction_memory.data[4]  = 32'h00000013;   // 0010: nop
+            dut.instruction_memory.data[5]  = 32'h100006b7;   // 0014: lui x13,0x10000
+            dut.instruction_memory.data[6]  = 32'h0006a023;   // 0018: sw x0,0(x13)    (RAM store right before fence.i)
+            dut.instruction_memory.data[7]  = with_fence ? 32'h0000100f : 32'h00000013;   // 001c: fence.i / nop
+            dut.instruction_memory.data[8]  = 32'h020000ef;   // 0020: jal x1,0x40
+            dut.instruction_memory.data[9]  = 32'h00050613;   // 0024: mv x12,x10
+            dut.instruction_memory.data[10] = 32'h000fa023;   // 0028: sw x0,0(x31)    (DONE)
+            dut.instruction_memory.data[11] = 32'h0000006f;   // 002c: j .
+            dut.instruction_memory.data[16] = 32'h00100513;   // 0040: F: li x10,1 (patched to li x10,2)
+            dut.instruction_memory.data[17] = 32'h00008067;   // 0044: ret
+        end
+    endtask
+
+    // The instruction right after fence.i (0x14) is patched while fence.i is in EX, i.e. after
+    // 0x14 was already fetched. Only the FENCE.I redirect (refetch of pc+4 after the
+    // invalidation) makes the new instruction execute: x12 = 2 with the I-Cache integration,
+    // x12 = 1 on the original core (its fence.i is a NOP).
+    task load_fencei_refetch;
+        begin
+            clear_imem;
+            dut.instruction_memory.data[0] = 32'h10010fb7;   // 0000: lui x31,0x10010
+            dut.instruction_memory.data[1] = 32'h00000013;   // 0004: nop
+            dut.instruction_memory.data[2] = 32'h000fa823;   // 0008: sw x0,16(x31)   (TB patches 0x14)
+            dut.instruction_memory.data[3] = 32'h00000013;   // 000c: nop
+            dut.instruction_memory.data[4] = 32'h0000100f;   // 0010: fence.i
+            dut.instruction_memory.data[5] = 32'h00100613;   // 0014: li x12,1 (patched to li x12,2)
+            for (i = 6; i < 12; i = i + 1)
+                dut.instruction_memory.data[i] = 32'h00000013;   // 0018..002c: nop
+            dut.instruction_memory.data[12] = 32'h000fa023;  // 0030: sw x0,0(x31)
+            dut.instruction_memory.data[13] = 32'h0000006f;  // 0034: j .
         end
     endtask
 
@@ -745,20 +1018,20 @@ module RV32IM54F_8SP_core_tb;
         load_mret_gap1;
         run_program("csrw, 1 nop, mret");
         check_reg("csrw, 1 nop, mret", 20, 32'h600D);
-        check_reg("csrw, 1 nop, mret", 22, 32'h4c);
+        check_reg("csrw, 1 nop, mret", 22, PROGRAM_BASE + 32'h4c);
         load_mret_gap2;
         run_program("csrw, 2 nops, mret");
         check_reg("csrw, 2 nops, mret", 20, 32'h600D);
-        check_reg("csrw, 2 nops, mret", 22, 32'h50);
+        check_reg("csrw, 2 nops, mret", 22, PROGRAM_BASE + 32'h50);
         load_mret_gap3;
         run_program("csrw, 3 nops, mret");
         check_reg("csrw, 3 nops, mret", 20, 32'h600D);
-        check_reg("csrw, 3 nops, mret", 22, 32'h54);
+        check_reg("csrw, 3 nops, mret", 22, PROGRAM_BASE + 32'h54);
         load_mret_gap4;
         run_program("csrw, 4 nops, mret");
         check_reg("csrw, 4 nops, mret", 20, 32'h600D);
         check_reg("csrw, 4 nops, mret", 21, 32'h1234);
-        check_reg("csrw, 4 nops, mret", 22, 32'h58);
+        check_reg("csrw, 4 nops, mret", 22, PROGRAM_BASE + 32'h58);
 
         // --------------------------------------------------------------------
         // 4. General regression
@@ -774,6 +1047,54 @@ module RV32IM54F_8SP_core_tb;
         check_reg("basic", 10, 32'd7);
         check_reg("basic", 12, 32'hFFFF_FBD1);
         check_reg("basic", 13, 32'hFFFF_FFFF);
+
+        // --------------------------------------------------------------------
+        // 5. FENCE.I: no restart, younger instructions still execute
+        // --------------------------------------------------------------------
+        $display("[TB] 5. FENCE.I");
+        load_fencei_restart;
+        run_program("fence.i no restart");
+        check_reg("fence.i no restart", 8, 32'd1);
+        check_reg("fence.i no restart", 6, 32'd2);
+        check_reg("fence.i no restart", 7, 32'd3);
+
+        // self-modifying code: the patched F() is seen only after fence.i
+        patch_en = 1'b1;
+        load_fencei_smc(1'b1);
+        run_program("fence.i smc");
+        check_reg("fence.i smc", 11, 32'd1);
+        check_reg("fence.i smc", 12, 32'd2);
+`ifdef HAS_ICACHE
+        check_value("fence.i smc", "icache fence_i_done", 1, fence_done_count);
+        check_value("fence.i smc", "fence.i held by store", 1, (fi_held > 0) ? 1 : 0);
+        check_value("fence.i smc", "ordering violations", 0, fi_violations);
+`endif
+        load_fencei_smc(1'b0);
+        run_program("smc control, no fence.i");
+        check_reg("smc control, no fence.i", 11, 32'd1);
+`ifdef HAS_ICACHE
+        if (ICACHE_EN != 0 && DDR_PROGRAM)
+            check_reg("smc control, no fence.i", 12, 32'd1);   // stale cached line
+        else
+            check_reg("smc control, no fence.i", 12, 32'd2);   // Boot ROM is not cached
+        check_value("smc control, no fence.i", "icache fence_i_done", 0, fence_done_count);
+`else
+        check_reg("smc control, no fence.i", 12, 32'd2);       // no cache: the patch is seen
+`endif
+
+        // fence.i must refetch the younger instructions after the invalidation
+        load_fencei_refetch;
+        run_program("fence.i refetch pc+4");
+`ifdef HAS_ICACHE
+        check_reg("fence.i refetch pc+4", 12, 32'd2);
+`else
+        check_reg("fence.i refetch pc+4", 12, 32'd1);          // original core: fence.i is a NOP
+`endif
+        patch_en = 1'b0;
+
+`ifdef HAS_ICACHE
+        check_value("all programs", "fence.i order violations", 0, fi_violations);
+`endif
 
         $display("============================================");
         $display(" PASS: %0d  FAIL: %0d", pass_count, fail_count);
