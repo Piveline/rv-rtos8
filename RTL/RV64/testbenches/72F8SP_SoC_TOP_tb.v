@@ -1,10 +1,20 @@
 // ============================================================================
 // tb_SoC_TOP — RV64IM72F8SP SoC Testbench
-// PS/2 Keyboard Mash TURBO Stress Version
+// FreeRTOS + Rhealstone 6-benchmark RTL Simulation Version
+//   (based on the PS/2 Keyboard Mash TURBO Stress TB)
 // ============================================================================
 //
-// Usage example:
-//   ./test.sh 54F8SP_SoC_TOP.v 54F8SP_SoC_TOP_tb.v
+// Usage example (run in RTL/RV64):
+//   ./test.sh 72F8SP_SoC_TOP.v 72F8SP_SoC_TOP_tb.v
+//
+// Rhealstone sequence:
+//   After boot, the TB types the following shell commands over PS/2 and waits
+//   for each "Rhealstone: <name> - <N> cycles" result line on UART:
+//     rheal switch / preempt / msg / sem / deadlock / intr
+//   Firmware: Firmware/FreeRTOS_RV64_Rheal_sim (reduced iteration count)
+//   PASS = 6 results, no error message, no timeout, no reboot.
+//
+// The keyboard mash stress tasks below are kept but no longer called.
 //
 // Notes:
 //   - Do NOT `include the SoC TOP file here if test.sh already compiles it.
@@ -128,9 +138,10 @@ module tb_SoC_TOP;
     // ========================================================================
     // VCD Dump
     // ========================================================================
-    initial begin
-        $dumpfile("soc_waveform_keyboard_mash_intensive.vcd");
-        $dumpvars(0, tb_SoC_TOP);
+        initial begin
+        $dumpfile("soc_waveform_rheal.vcd");
+        $dumpvars(1, tb_SoC_TOP);          // TB top-level: uart_tx, PS2, LED ...
+        //$dumpvars(0, tb_SoC_TOP.dut.cpu);  // whole CPU core
     end
 /*
     initial begin
@@ -152,8 +163,21 @@ module tb_SoC_TOP;
 
     localparam [8*19-1:0] BOOT_BANNER = "System Initialized.";
 
+    // --- Rhealstone result detection ---
+    integer rheal_done_count;      // number of "... cycles" result lines
+    integer rheal_fail_count;      // "failed" / "unknown" messages
+    integer rheal_timeout_count;   // commands that timed out
+    reg [8*6-1:0] uart_tail6;      // last 6 UART characters
+
     initial begin
-        uart_log_fd       = $fopen("uart_output_keyboard_mash.log", "w");
+        rheal_done_count    = 0;
+        rheal_fail_count    = 0;
+        rheal_timeout_count = 0;
+        uart_tail6          = {8*6{1'b0}};
+    end
+
+    initial begin
+        uart_log_fd       = $fopen("uart_output_rheal.log", "w");
         uart_char_count   = 0;
         boot_banner_count = 0;
         stress_error_count = 0;
@@ -211,6 +235,21 @@ module tb_SoC_TOP;
                     $display("[TB][ERR] %0t: Possible reset/restart during keyboard mash stress!",
                         $time);
                 end
+            end
+
+            // Rhealstone result / error detection
+            uart_tail6 = {uart_tail6[8*5-1:0], uart_rx_byte};
+
+            if (uart_tail6 == "cycles") begin
+                rheal_done_count = rheal_done_count + 1;
+                $display("[TB]   %0t: Rhealstone result #%0d received",
+                    $time, rheal_done_count);
+            end
+
+            // "xTaskCreate failed", "unknown rheal benchmark"
+            if (uart_tail6 == "failed" || uart_tail6 == "nknown") begin
+                rheal_fail_count = rheal_fail_count + 1;
+                $display("[TB][ERR] %0t: Rhealstone error message on UART", $time);
             end
         end
     end
@@ -651,7 +690,76 @@ module tb_SoC_TOP;
 
 
     // ========================================================================
-    // Main Sequence — Single Intensive Keyboard Mash Stress Test
+    // Rhealstone command input
+    // ========================================================================
+    // Shell reads 1 scancode per 1 ms tick (vTaskDelay(1)) and the KB FIFO is 8 deep.
+    // One key = 3 bytes (make, F0, make) -> keep >= 3 ms per key to avoid FIFO overflow.
+    localparam KEY_GAP_NS       = 5_000_000;     // 5 ms between keys
+    localparam RHEAL_TIMEOUT_NS = 200_000_000;   // max 200 ms per command
+
+    // ASCII -> PS/2 Set 2 make code (only characters used by "rheal ...")
+    function [7:0] ascii_to_scan;
+        input [7:0] ch;
+        begin
+            case (ch)
+                "a": ascii_to_scan = 8'h1C;  "c": ascii_to_scan = 8'h21;
+                "d": ascii_to_scan = 8'h23;  "e": ascii_to_scan = 8'h24;
+                "g": ascii_to_scan = 8'h34;  "h": ascii_to_scan = 8'h33;
+                "i": ascii_to_scan = 8'h43;  "k": ascii_to_scan = 8'h42;
+                "l": ascii_to_scan = 8'h4B;  "m": ascii_to_scan = 8'h3A;
+                "n": ascii_to_scan = 8'h31;  "o": ascii_to_scan = 8'h44;
+                "p": ascii_to_scan = 8'h4D;  "r": ascii_to_scan = 8'h2D;
+                "s": ascii_to_scan = 8'h1B;  "t": ascii_to_scan = 8'h2C;
+                "w": ascii_to_scan = 8'h1D;  " ": ascii_to_scan = 8'h29;
+                default: begin
+                    ascii_to_scan = 8'h00;
+                    $display("[TB][ERR] no scan code for '%c'", ch);
+                end
+            endcase
+        end
+    endfunction
+
+    // Type a string (max 16 chars) and press Enter
+    task type_cmd;
+        input [8*16-1:0] str;
+        integer i;
+        reg [7:0] ch;
+        begin
+            for (i = 15; i >= 0; i = i - 1) begin
+                ch = str[i*8 +: 8];
+                if (ch != 8'h00)            // skip zero padding of short strings
+                    ps2_tap_key(ascii_to_scan(ch), KEY_GAP_NS);
+            end
+            ps2_enter();
+        end
+    endtask
+
+    // Type one rheal command and wait for its "... cycles" result line
+    task run_rheal;
+        input [8*16-1:0] cmd;
+        integer expected;
+        time    t_start;
+        begin
+            expected = rheal_done_count + 1;
+            $display("[TB]   %0t: >>> %0s", $time, cmd);
+            type_cmd(cmd);
+
+            t_start = $time;
+            while ((rheal_done_count < expected) &&
+                   (($time - t_start) < RHEAL_TIMEOUT_NS))
+                #100_000;
+
+            if (rheal_done_count < expected) begin
+                rheal_timeout_count = rheal_timeout_count + 1;
+                $display("[TB][ERR] %0t: timeout waiting result of '%0s'", $time, cmd);
+            end
+
+            #3_000_000;   // wait for the next prompt (3 ms)
+        end
+    endtask
+
+    // ========================================================================
+    // Main Sequence — FreeRTOS + Rhealstone 6 benchmarks
     // ========================================================================
     initial begin
         CPU_RESETN     = 1'b0;
@@ -662,8 +770,8 @@ module tb_SoC_TOP;
         ps2_data_drive = 1'b1;
 
         $display("============================================");
-        $display(" RV64IM72F8SP SoC Testbench - PS/2 TURBO KEYBOARD MASH MODE");
-        $display(" Payload: asdlkifgjnas;lodfgihasdgo;pihjsdo;pig");
+        $display(" RV64IM72F8SP SoC Testbench - FreeRTOS + Rhealstone 6 benchmarks");
+        $display(" Commands: rheal switch/preempt/msg/sem/deadlock/intr");
         $display(" Sim: %0d us (%0d ms)", SIM_TIME_US, SIM_TIME_US / 1000);
         $display(" PS2_CLK_HALF=%0d ns, byte pre/post idle=%0d/%0d ns",
             PS2_CLK_HALF, PS2_BYTE_PRE_IDLE, PS2_BYTE_POST_IDLE);
@@ -692,15 +800,31 @@ module tb_SoC_TOP;
         // Give firmware time to print prompt and enter shell loop.
         #8_000_000;
 
-        run_ultra_keyboard_mash_sequence();
+        // Reboot during benchmarks is counted as an error (stress_error_count)
+        stress_active = 1'b1;
 
-        // Observe idle behavior after stress.
-        #20_000_000;
+        run_rheal("rheal switch");
+        run_rheal("rheal preempt");
+        run_rheal("rheal msg");
+        run_rheal("rheal sem");
+        run_rheal("rheal deadlock");
+        run_rheal("rheal intr");
 
-        $display("[TB]   %0t: Stress test done", $time);
-        $display("[TB]   UART chars observed: %0d", uart_char_count);
-        $display("[TB]   Boot banners observed: %0d", boot_banner_count);
-        $display("[TB]   Stress errors observed: %0d", stress_error_count);
+        stress_active = 1'b0;
+
+        $display("============================================");
+        $display(" Rhealstone summary (%0t)", $time);
+        $display("   results received : %0d / 6", rheal_done_count);
+        $display("   error messages   : %0d", rheal_fail_count);
+        $display("   timeouts         : %0d", rheal_timeout_count);
+        $display("   reboots          : %0d", stress_error_count);
+        $display("   UART chars       : %0d", uart_char_count);
+        if (rheal_done_count == 6 && rheal_fail_count == 0 &&
+            rheal_timeout_count == 0 && stress_error_count == 0)
+            $display("   >>> PASS");
+        else
+            $display("   >>> FAIL");
+        $display("============================================");
         $finish;
     end
 
@@ -728,10 +852,68 @@ module tb_SoC_TOP;
     // Timeout
     // ========================================================================
     initial begin
-        #(SIM_TIME_US * 1000);
+        #(SIM_TIME_US * 64'd1000);   // 64-bit: 5,000,000 * 1000 overflows 32-bit integer
         $display("[TB]   %0t: Timeout finish", $time);
         $display("[TB]   UART chars observed: %0d", uart_char_count);
         $finish;
+    end
+
+    // ========================================================================
+    // CPU Trap / Restart Monitor (debug: find why the CPU reboots)
+    //   - keeps the last 32 retired PCs (WB stage)
+    //   - prints unusual traps (not ECALL / MRET / TIMER)
+    //   - when PC goes back to 0 after boot, dumps the PC history once
+    // ========================================================================
+    reg [63:0] pc_hist [0:31];
+    reg [4:0]  pc_hist_ptr;
+    reg        restart_dumped;
+    reg        trap_prev;
+    integer    hi;
+
+    initial begin
+        pc_hist_ptr    = 5'd0;
+        restart_dumped = 1'b0;
+        trap_prev      = 1'b0;
+    end
+
+    always @(posedge tb_SoC_TOP.dut.cpu.clk) begin
+        if (tb_SoC_TOP.dut.cpu.clk_enable && !tb_SoC_TOP.dut.cpu.reset) begin
+            // retired PC history
+            if (tb_SoC_TOP.dut.cpu.instruction_retired) begin
+                pc_hist[pc_hist_ptr] = tb_SoC_TOP.dut.cpu.WB_pc;
+                pc_hist_ptr = pc_hist_ptr + 5'd1;
+            end
+
+            // unusual traps (rising edge of trapped)
+            if (tb_SoC_TOP.dut.cpu.trapped && !trap_prev &&
+                tb_SoC_TOP.dut.cpu.trap_status != 4'b0010 &&   // ECALL
+                tb_SoC_TOP.dut.cpu.trap_status != 4'b0100 &&   // MRET
+                tb_SoC_TOP.dut.cpu.trap_status != 4'b1000) begin // TIMER
+                $display("[TRAP] %0t: status=%b WB_pc=%h MEM_pc=%h mepc=%h mcause=%h target=%h",
+                    $time,
+                    tb_SoC_TOP.dut.cpu.trap_status,
+                    tb_SoC_TOP.dut.cpu.WB_pc,
+                    tb_SoC_TOP.dut.cpu.MEM_pc,
+                    tb_SoC_TOP.dut.cpu.csr_file.mepc,
+                    tb_SoC_TOP.dut.cpu.csr_file.mcause,
+                    tb_SoC_TOP.dut.cpu.trap_target);
+            end
+            trap_prev = tb_SoC_TOP.dut.cpu.trapped;
+
+            // restart: PC back to 0 after the first boot banner
+            if (!restart_dumped && boot_banner_count >= 1 &&
+                tb_SoC_TOP.dut.cpu.pc == 64'd0) begin
+                restart_dumped = 1'b1;
+                $display("[RESTART] %0t: PC returned to 0. mepc=%h mcause=%h mtvec=%h",
+                    $time,
+                    tb_SoC_TOP.dut.cpu.csr_file.mepc,
+                    tb_SoC_TOP.dut.cpu.csr_file.mcause,
+                    tb_SoC_TOP.dut.cpu.csr_file.mtvec);
+                $display("[RESTART] last 32 retired PCs (oldest -> newest):");
+                for (hi = 0; hi < 32; hi = hi + 1)
+                    $display("[RESTART]   %h", pc_hist[(pc_hist_ptr + hi) % 32]);
+            end
+        end
     end
 
 endmodule

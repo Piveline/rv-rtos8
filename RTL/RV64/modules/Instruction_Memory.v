@@ -41,7 +41,7 @@ module InstructionMemory #(
 	end
 	
 	initial begin
-		$readmemh("./modules/firmware_RV64_rheal_up.mem", data);
+		$readmemh("../../Firmware/FreeRTOS_RV64_Rheal_sim/firmware_RV64_Rheal_sim.mem", data);
 	end
 
 endmodule

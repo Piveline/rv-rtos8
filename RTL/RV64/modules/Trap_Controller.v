@@ -239,7 +239,7 @@ always @(*) begin
             csr_write_enable       = 1'b1;
             csr_trap_address       = 12'h341; // mepc
             csr_trap_write_data = jumpped_latch ? pc : 
-                                (WB_pc != {XLEN{1'b0}}) ? WB_pc : 
+                                // [DEBUG] removed WB_pc: WB instruction is already committed -> re-executed after mret
                                 (MEM_pc != {XLEN{1'b0}}) ? MEM_pc : 
                                 (EX2_pc != {XLEN{1'b0}}) ? EX2_pc : 
                                 (EXR_pc != {XLEN{1'b0}}) ? EXR_pc : 
