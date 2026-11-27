@@ -42,7 +42,7 @@ module InstructionMemory #(
 	end
 	
 	initial begin
-		$readmemh("./modules/firmware_tasks.mem", data);
+		$readmemh("../../Firmware/FreeRTOS_RV32_Rheal_sim/firmware_RV32_Rheal_sim.mem", data);
 	end
 
 endmodule
