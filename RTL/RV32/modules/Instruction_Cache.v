@@ -7,10 +7,11 @@
  *   next cycle : tag compare on cpu_req_addr; a hit returns cpu_rdata in the same cycle
  *   miss : cpu_busy = 1 until the line is in; the core freezes on cpu_busy, then the line
  *          is read again (RELOOKUP) and the fetch finishes as a hit
- * - AXI error handling
- *   RRESP error or RLAST on the wrong beat : the line is not kept and the fetch ends with
- *   served_rdata and cpu_error (level until the next fetch_advance)
- *   The refill ends on the 4th beat or on RLAST, whichever comes first
+ * - AXI read response : RRESP and RLAST are not checked
+ *   refill (INCR x 4 beat) ends on the 4th beat; the line is always kept as valid
+ *   bypass read (1 beat) ends on the first beat
+ *   a line received with SLVERR / DECERR stays valid until FENCE.I
+ *   a burst shorter than ARLEN+1 beats is not supported (the refill waits for the 4th beat)
  * - FENCE.I : fence_i_req is a level held until fence_i_done (1-cycle pulse);
  *   req must be low for at least one cycle before the next request
  */
@@ -36,7 +37,6 @@ module InstructionCache #(
 	// Instruction Cache -> CPU Core
 	output wire [31:0] cpu_rdata,
 	output wire cpu_busy, // 1 : the fetch is not finished, freeze the core
-	output wire cpu_error, // the fetch ended with an AXI error, cpu_rdata is not valid
 	output reg fence_i_done,
 
 	// Performance counters
@@ -54,8 +54,8 @@ module InstructionCache #(
 
 	// AXI4 Master Interface (R Channel)
 	input wire [63:0] m_axi_rdata,
-	input wire [1:0] m_axi_rresp,
-	input wire m_axi_rlast,
+	input wire [1:0] m_axi_rresp, // not used
+	input wire m_axi_rlast, // not used : the refill ends on the beat count
 	input wire m_axi_rvalid,
 	output wire m_axi_rready
 );
@@ -76,7 +76,6 @@ module InstructionCache #(
 
 	// Latched Request Info
 	reg [31:0] latched_addr;
-	reg [63:0] latched_axi_data;
 	reg latched_target_way;
 
 	// Address Decoding (Use stable latched_addr during operation)
@@ -97,12 +96,10 @@ module InstructionCache #(
 	(* ram_style = "block" *) reg [63:0] data_ram_w1 [0:(NUM_SETS*4)-1];
 
 	reg [1:0] burst_cnt;
-	reg refill_error; // error response or RLAST on the wrong beat seen during this refill
 	reg [INDEX_BITS:0] fence_cnt;
 
 	// Result of the fetch now at the output (cleared when IF takes a new pc)
-	reg served; // finished by the FSM (bypass or AXI error) : answer is in served_rdata
-	reg served_error;
+	reg served; // finished by the state machine (bypass) : answer is in served_rdata
 	reg [31:0] served_rdata;
 
 	// Synchronous BRAM Read (1-cycle latency)
@@ -121,7 +118,7 @@ module InstructionCache #(
 		end
 	end
 
-	// AXI response : SLVERR (10) and DECERR (11) are errors
+	// RRESP / RLAST are not checked (see the header)
 	// RREADY only on enabled edges, so a slave that ignores clk_enable never loses a beat
 	assign m_axi_arlen = (state == STATE_BYPASS_AR) ? 8'd0 : 8'd3;
 	assign m_axi_arsize = 3'b011;
@@ -130,9 +127,7 @@ module InstructionCache #(
 
 	wire ar_handshake = m_axi_arvalid && m_axi_arready;
 	wire refill_beat = (state == STATE_ALLOC_R) && m_axi_rvalid && m_axi_rready;
-	wire refill_last_beat = m_axi_rlast || (burst_cnt == 2'd3);
-	wire refill_beat_error = m_axi_rresp[1] || (m_axi_rlast != (burst_cnt == 2'd3));
-	wire refill_failed = refill_error || refill_beat_error;
+	wire refill_last_beat = (burst_cnt == 2'd3);
 
 	// Lookup on the word read at the fetch edge
 	wire hit_w0 = valid_w0[a_idx] && (tag_ram_w0[a_idx] == a_tag);
@@ -147,10 +142,6 @@ module InstructionCache #(
 	// core is still frozen (FENCE.I is still in EX2 when the core moves again)
 	assign cpu_busy = !fetch_check_state || fence_i_req || fetch_need_fsm;
 	assign cpu_rdata = served ? served_rdata : fetch_hit ? fetch_hit_word : 32'h0000_0013;
-	assign cpu_error = served && served_error;
-
-	// Extracted target word from AXI refill
-	wire [63:0] current_extracted_data = (burst_cnt == a_offset[4:3]) ? m_axi_rdata : latched_axi_data;
 
 	// Data / tag RAM writes live in reset-less blocks so they can be inferred as BRAM
 	wire data_we = !reset && refill_beat;
@@ -170,16 +161,13 @@ module InstructionCache #(
 		if (reset) begin
 			state <= STATE_IDLE;
 			served <= 1'b0;
-			served_error <= 1'b0;
 			served_rdata <= 32'h0000_0013;
 			fence_i_done <= 1'b0;
 			m_axi_arvalid <= 1'b0;
 			m_axi_araddr <= 32'h0;
 			burst_cnt <= 2'b0;
-			refill_error <= 1'b0;
 			fence_cnt <= {(INDEX_BITS+1){1'b0}};
 			latched_addr <= 32'h0;
-			latched_axi_data <= 64'h0;
 			latched_target_way <= 1'b0;
 			perf_access <= 32'h0;
 			perf_miss <= 32'h0;
@@ -205,7 +193,6 @@ module InstructionCache #(
 				// IF takes a new pc : forget the result of the previous fetch
 				if (fetch_advance) begin
 					served <= 1'b0;
-					served_error <= 1'b0;
 					if (cpu_req_valid && a_cacheable && !perf_clear) perf_access <= perf_access + 32'd1;
 				end
 			end
@@ -248,7 +235,6 @@ module InstructionCache #(
 					if (ar_handshake) begin
 						m_axi_arvalid <= 1'b0;
 						burst_cnt <= 2'b0;
-						refill_error <= 1'b0;
 						state <= STATE_ALLOC_R;
 					end
 				end
@@ -256,25 +242,13 @@ module InstructionCache #(
 				STATE_ALLOC_R: begin
 					if (refill_beat) begin
 						// each beat is written by the data RAM write port above
-						if (burst_cnt == a_offset[4:3]) latched_axi_data <= m_axi_rdata;
 						burst_cnt <= burst_cnt + 2'd1;
-						if (refill_beat_error) refill_error <= 1'b1;
 
 						if (refill_last_beat) begin
-							if (refill_failed) begin
-								// broken line : do not keep it, answer this fetch once with an error
-								if (latched_target_way == 1'b0) valid_w0[a_idx] <= 1'b0;
-								else valid_w1[a_idx] <= 1'b0;
-								served <= 1'b1;
-								served_error <= 1'b1;
-								served_rdata <= a_offset[2] ? current_extracted_data[63:32] : current_extracted_data[31:0];
-								state <= STATE_IDLE;
-							end else begin
-								if (latched_target_way == 1'b0) valid_w0[a_idx] <= 1'b1;
-								else valid_w1[a_idx] <= 1'b1;
-								lru_bit[a_idx] <= ~latched_target_way;
-								state <= STATE_RELOOKUP;
-							end
+							if (latched_target_way == 1'b0) valid_w0[a_idx] <= 1'b1;
+							else valid_w1[a_idx] <= 1'b1;
+							lru_bit[a_idx] <= ~latched_target_way;
+							state <= STATE_RELOOKUP;
 						end
 					end
 				end
@@ -290,7 +264,6 @@ module InstructionCache #(
 					if (m_axi_rvalid && m_axi_rready) begin
 						served <= 1'b1;
 						served_rdata <= a_offset[2] ? m_axi_rdata[63:32] : m_axi_rdata[31:0];
-						served_error <= m_axi_rresp[1] || !m_axi_rlast;
 						state <= STATE_IDLE;
 					end
 				end

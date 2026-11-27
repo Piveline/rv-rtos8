@@ -5,15 +5,17 @@
 
 /*
  * Instruction Cache testbench
- * - The TB drives the cache the way the core does: lookup_address is read on fetch_advance,
+ * - The testbench drives the cache the way the core does: lookup_address is read on fetch_advance,
  *   cpu_req_addr / cpu_req_valid describe the fetch at the output, and the "core" moves on
  *   only on an edge with clk_enable = 1 and cpu_busy = 0
- * - Every fetch is checked against the memory (cpu_rdata, cpu_error) and against a reference
+ * - Every fetch is checked against the memory (cpu_rdata) and against a reference
  *   model of the cache: hit = no AXI burst, miss = one burst, LRU victim, FENCE.I invalidation
- * - AXI slave : TB model (random latency, error injection, gated by clk_enable or not)
- *   or DummyDDRMemory (fixed latency, SLVERR window at 0x8001_F000)
+ * - AXI slave : testbench model (random latency, SLVERR on one beat or RLAST missing,
+ *   gated by clk_enable or not) or DummyDDRMemory (fixed latency, SLVERR window at 0x8001_F000)
+ * - RRESP / RLAST are not checked by the cache: with SLVERR or a missing RLAST the data is
+ *   still correct, so every fetch returns the memory word and every refill keeps its line
  * - Run from RTL/RV32:
- *   iverilog -PInstructionCache_tb.NUM_SETS=16 -o ic.vvp testbenches/Instruction_Cache_tb.v
+ *   iverilog -PInstructionCache_tb.NUM_SETS=16 -o ic.vvp testbenches/Instruction_cache_tb.v
  *   vvp -n ic.vvp
  */
 module InstructionCache_tb;
@@ -50,7 +52,6 @@ module InstructionCache_tb;
 
 	wire [31:0] cpu_rdata;
 	wire cpu_busy;
-	wire cpu_error;
 	wire fence_i_done;
 	wire [31:0] perf_access;
 	wire [31:0] perf_miss;
@@ -89,7 +90,6 @@ module InstructionCache_tb;
 		.perf_clear(perf_clear),
 		.cpu_rdata(cpu_rdata),
 		.cpu_busy(cpu_busy),
-		.cpu_error(cpu_error),
 		.fence_i_done(fence_i_done),
 		.perf_access(perf_access),
 		.perf_miss(perf_miss),
@@ -168,7 +168,7 @@ module InstructionCache_tb;
 
 	// ------------------------------------------------------------------------
 	// TB AXI slave model
-	// error mode per burst : 0 none, 1 SLVERR on one beat, 2 RLAST early, 3 RLAST missing
+	// error mode per burst : 0 none, 1 SLVERR on one beat, 2 RLAST missing (data is correct in both)
 	// ------------------------------------------------------------------------
 	reg model_active; // a burst is accepted
 	reg [31:0] model_address;
@@ -183,7 +183,7 @@ module InstructionCache_tb;
 	reg [1:0] model_rresp;
 	reg model_rlast;
 	integer latency_max; // R latency 0 .. latency_max-1, beat gaps and AR wait 0 .. 2
-	integer error_rate; // 1 of error_rate bursts gets an error, 0 = never
+	integer error_rate; // 1 of error_rate bursts gets SLVERR or a missing RLAST, 0 = never
 	reg [1:0] force_error_mode; // directed tests : error mode of the next burst
 	reg [1:0] force_error_beat;
 
@@ -209,9 +209,7 @@ module InstructionCache_tb;
 			model_rvalid <= 1'b1;
 			model_rdata <= memory[((model_address >> 3) + beat) & (DDR_WORDS-1)];
 			model_rresp <= (model_error_mode == 2'd1 && beat == model_error_beat) ? 2'b10 : 2'b00;
-			if (model_error_mode == 2'd2) model_rlast <= (beat == model_error_beat);
-			else if (model_error_mode == 2'd3) model_rlast <= 1'b0;
-			else model_rlast <= (beat == model_length);
+			model_rlast <= (model_error_mode == 2'd2) ? 1'b0 : (beat == model_length);
 		end
 	endtask
 
@@ -241,9 +239,8 @@ module InstructionCache_tb;
 						force_error_mode <= 2'd0;
 					end
 					else if (error_rate != 0 && random_below(error_rate) == 0) begin
-						// RLAST early only makes sense for a 4-beat burst
-						model_error_mode <= (m_axi_arlen == 8'd0) ? (($random & 1) ? 2'd1 : 2'd3) : (1 + random_below(3));
-						model_error_beat <= (m_axi_arlen == 8'd0) ? 2'd0 : random_below(3);
+						model_error_mode <= ($random & 1) ? 2'd1 : 2'd2;
+						model_error_beat <= (m_axi_arlen == 8'd0) ? 2'd0 : random_below(4);
 					end
 					else begin
 						model_error_mode <= 2'd0;
@@ -255,7 +252,7 @@ module InstructionCache_tb;
 			end
 			else if (model_rvalid) begin
 				if (m_axi_rready) begin
-					if ((model_error_mode == 2'd2) ? (model_beat == model_error_beat) : (model_beat == model_length)) begin
+					if (model_beat == model_length) begin
 						model_rvalid <= 1'b0;
 						model_rlast <= 1'b0;
 						model_active <= 1'b0;
@@ -330,24 +327,23 @@ module InstructionCache_tb;
 		end
 	endtask
 
-	// end of a 4-beat refill : the victim way gets the line, or loses it on an error
+	// end of a 4-beat refill : the victim way gets the line (RRESP / RLAST do not matter)
 	task reference_refill;
 		input [31:0] address;
-		input failed;
 		reg victim;
 		reg [INDEX_BITS-1:0] index;
 		begin
 			index = index_of(address);
 			victim = !reference_valid0[index] ? 1'b0 : !reference_valid1[index] ? 1'b1 : reference_lru[index];
 			if (victim == 1'b0) begin
-				reference_valid0[index] = !failed;
+				reference_valid0[index] = 1'b1;
 				reference_tag0[index] = tag_of(address);
 			end
 			else begin
-				reference_valid1[index] = !failed;
+				reference_valid1[index] = 1'b1;
 				reference_tag1[index] = tag_of(address);
 			end
-			if (!failed) reference_lru[index] = ~victim;
+			reference_lru[index] = ~victim;
 		end
 	endtask
 
@@ -358,12 +354,10 @@ module InstructionCache_tb;
 	integer ar_count; // AR handshakes
 	integer refill_count; // AR handshakes with ARLEN = 3
 	integer burst_done_count;
-	reg last_burst_error;
 	reg burst_open;
 	reg [31:0] burst_address;
 	reg [7:0] burst_length;
 	reg [7:0] burst_beats;
-	reg burst_error;
 	reg ar_pending; // ARVALID was high without ARREADY on the previous edge
 	reg [31:0] ar_pending_address;
 	reg [7:0] ar_pending_length;
@@ -376,14 +370,10 @@ module InstructionCache_tb;
 	// fetch at the output
 	reg checked;
 	reg predicted_hit;
-	reg served_before_fence;
 	integer ar_at_issue;
-	integer bursts_at_issue;
 	integer fence_at_issue;
 	reg [31:0] saved_rdata;
-	reg saved_error;
 	integer completed_count;
-	integer error_fetch_count;
 	integer hit_count;
 	integer wait_cycles;
 
@@ -401,15 +391,13 @@ module InstructionCache_tb;
 		begin
 			error_count = error_count + 1;
 			if (check_messages || mismatch_print < 10)
-				$display("     [mismatch] t=%0t %0s : pc=%h rdata=%h error=%b expected=%h", $time, what,
-					fetch_pc, cpu_rdata, cpu_error, memory_word(fetch_pc));
+				$display("     [mismatch] t=%0t %0s : pc=%h rdata=%h expected=%h", $time, what,
+					fetch_pc, cpu_rdata, memory_word(fetch_pc));
 			mismatch_print = mismatch_print + 1;
 		end
 	endtask
 
 	reg [1:0] lookup_result;
-	reg expect_error;
-	integer burst_since;
 	integer ar_since;
 
 	always @(posedge clk) begin
@@ -424,9 +412,9 @@ module InstructionCache_tb;
 			access_expected = 0;
 			miss_expected = 0;
 			stall_expected = 0;
-			if (!issued && !fence_req && (cpu_rdata !== NOP || cpu_busy !== 1'b0 || cpu_error !== 1'b0)) begin
+			if (!issued && !fence_req && (cpu_rdata !== NOP || cpu_busy !== 1'b0)) begin
 				error_count = error_count + 1;
-				$display("     [mismatch] t=%0t during reset : rdata=%h busy=%b error=%b", $time, cpu_rdata, cpu_busy, cpu_error);
+				$display("     [mismatch] t=%0t during reset : rdata=%h busy=%b", $time, cpu_rdata, cpu_busy);
 			end
 		end
 		else begin
@@ -459,7 +447,6 @@ module InstructionCache_tb;
 				burst_address = m_axi_araddr;
 				burst_length = m_axi_arlen;
 				burst_beats = 8'd0;
-				burst_error = 1'b0;
 			end
 
 			if (m_axi_rvalid && m_axi_rready) begin
@@ -467,12 +454,11 @@ module InstructionCache_tb;
 					error_count = error_count + 1;
 					$display("     [mismatch] t=%0t R beat without a burst", $time);
 				end
-				if (m_axi_rresp[1] || (m_axi_rlast != (burst_beats == burst_length))) burst_error = 1'b1;
-				if (m_axi_rlast || burst_beats == burst_length) begin
+				// the burst ends on the beat count, like the cache (RLAST is not looked at)
+				if (burst_beats == burst_length) begin
 					burst_open = 1'b0;
 					burst_done_count = burst_done_count + 1;
-					last_burst_error = burst_error;
-					if (burst_length == 8'd3) reference_refill(burst_address, burst_error);
+					if (burst_length == 8'd3) reference_refill(burst_address);
 				end
 				burst_beats = burst_beats + 8'd1;
 			end
@@ -499,12 +485,8 @@ module InstructionCache_tb;
 					fence_gap = 1 + random_below(3);
 					reference_invalidate;
 					if (issued) begin
-						// an error answer is kept by the cache (served), no refetch after the invalidation
-						served_before_fence = (checked && saved_error) ||
-							(!checked && (burst_done_count - bursts_at_issue > 0) && last_burst_error);
 						checked = 1'b0;
 						ar_at_issue = ar_count;
-						bursts_at_issue = burst_done_count;
 					end
 				end
 				else if (!fence_req && fence_gap > 0) begin
@@ -532,11 +514,7 @@ module InstructionCache_tb;
 			if (clk_enable && !cpu_busy && issued) begin
 				if (!checked) begin
 					ar_since = ar_count - ar_at_issue;
-					burst_since = burst_done_count - bursts_at_issue;
-					expect_error = (burst_since > 0) ? last_burst_error : served_before_fence;
-					if (cpu_error !== expect_error)
-						report_mismatch("cpu_error");
-					else if (!expect_error && cpu_rdata !== memory_word(fetch_pc))
+					if (cpu_rdata !== memory_word(fetch_pc))
 						report_mismatch("cpu_rdata");
 					if (fence_at_issue == fence_done_count) begin
 						if (!cacheable(fetch_pc)) begin
@@ -555,13 +533,11 @@ module InstructionCache_tb;
 							if (predicted_hit) hit_count = hit_count + 1;
 						end
 					end
-					if (cpu_error) error_fetch_count = error_fetch_count + 1;
 					saved_rdata = cpu_rdata;
-					saved_error = cpu_error;
 					checked = 1'b1;
 					completed_count = completed_count + 1;
 				end
-				else if (cpu_rdata !== saved_rdata || cpu_error !== saved_error) begin
+				else if (cpu_rdata !== saved_rdata) begin
 					report_mismatch("output changed while the fetch was held");
 				end
 			end
@@ -581,9 +557,7 @@ module InstructionCache_tb;
 				stream_pos <= stream_pos + 1;
 				lookup_result = reference_lookup(lookup_address);
 				predicted_hit = cacheable(lookup_address) && (lookup_result != 2'd0);
-				served_before_fence = 1'b0;
 				ar_at_issue = ar_count;
-				bursts_at_issue = burst_done_count;
 				fence_at_issue = fence_done_count;
 				checked = 1'b0;
 			end
@@ -747,7 +721,7 @@ module InstructionCache_tb;
 	endfunction
 
 	task random_phase;
-		input [8*80-1:0] name;
+		input [8*128-1:0] name;
 		input dummy;
 		input gated;
 		input integer ce_rate;
@@ -755,7 +729,6 @@ module InstructionCache_tb;
 		input integer fences;
 		integer n;
 		integer before;
-		integer errors_before;
 		integer hits_before;
 		integer refills_before;
 		integer fences_before;
@@ -775,7 +748,6 @@ module InstructionCache_tb;
 					stream[n] = random_address(dummy);
 			end
 			before = error_count;
-			errors_before = error_fetch_count;
 			hits_before = hit_count;
 			refills_before = refill_count;
 			fences_before = fence_done_count;
@@ -790,9 +762,8 @@ module InstructionCache_tb;
 			clk_enable_rate = 0;
 			stall_rate = 0;
 			repeat (4) @(negedge clk);
-			$display("     %0d fetches, %0d hits, %0d with cpu_error, %0d refills, %0d FENCE.I", RANDOM_FETCHES,
-				hit_count - hits_before, error_fetch_count - errors_before, refill_count - refills_before,
-				fence_done_count - fences_before);
+			$display("     %0d fetches, %0d hits, %0d refills, %0d FENCE.I", RANDOM_FETCHES,
+				hit_count - hits_before, refill_count - refills_before, fence_done_count - fences_before);
 			check_no_mismatch("every fetch matches memory and the reference model", before);
 			check_perf("perf counters");
 			check_messages = 1'b1;
@@ -819,11 +790,9 @@ module InstructionCache_tb;
 		ar_count = 0;
 		refill_count = 0;
 		burst_done_count = 0;
-		last_burst_error = 1'b0;
 		fence_done_count = 0;
 		fence_gap = 0;
 		completed_count = 0;
-		error_fetch_count = 0;
 		hit_count = 0;
 		wait_cycles = 0;
 		access_expected = 0;
@@ -1011,61 +980,46 @@ module InstructionCache_tb;
 		check_no_mismatch("bypass data (ARLEN = 0, 8-byte aligned)", before);
 
 		// --------------------------------------------------------------------
-		$display("\n[T-I09] AXI errors");
+		$display("\n[T-I09] AXI response ignored : SLVERR / missing RLAST, data and line kept");
 		set_quiet;
 		do_reset;
 		before = error_count;
-		k = error_fetch_count;
-		// SLVERR on beat 2 of a refill
+		// SLVERR on beat 2 of a refill (CACHE_EN=0 : on the single beat of a bypass read)
 		force_error_mode = 2'd1;
 		force_error_beat = (CACHE_EN != 0) ? 2'd2 : 2'd0;
 		stream[0] = 32'h8000_4004;
 		ar_before = ar_count;
 		run_stream(1);
-		check(cpu_error === 1'b1, "SLVERR : fetch ends with cpu_error");
-		repeat (5) @(negedge clk);
-		check(cpu_error === 1'b1 && cpu_busy === 1'b0, "cpu_error stays high until the next fetch_advance");
+		check(cpu_rdata === memory_word(32'h8000_4004),
+			CACHE_EN != 0 ? "SLVERR on a refill beat : fetch returns the memory word" : "CACHE_EN=0 : SLVERR on a bypass read, fetch returns the memory word");
 		stream[0] = 32'h8000_4004;
-		stream[1] = 32'h8000_4008;
+		stream[1] = 32'h8000_4010; // beat 2 of the same line
+		ar_before = ar_count;
 		run_stream(2);
-		check(ar_count - ar_before == (CACHE_EN != 0 ? 2 : 3) && cpu_error === 1'b0,
-			CACHE_EN != 0 ? "line was not kept : refetch misses, then hits" : "bypass refetch is clean");
-		// RLAST on beat 1
-		if (CACHE_EN != 0) begin
-			force_error_mode = 2'd2;
-			force_error_beat = 2'd1;
-			stream[0] = 32'h8000_4104;
-			run_stream(1);
-			check(cpu_error === 1'b1, "RLAST early : the refill ends there with cpu_error");
-			stream[0] = 32'h8000_411C;
-			ar_before = ar_count;
-			run_stream(1);
-			check(ar_count - ar_before == 1 && cpu_error === 1'b0, "the short line is not used : next word of it misses");
-		end
+		check(ar_count - ar_before == (CACHE_EN != 0 ? 0 : 2),
+			CACHE_EN != 0 ? "the line is kept : same line again hits with no AXI access" : "CACHE_EN=0 : each fetch is a bypass read");
 		// RLAST never asserted
-		force_error_mode = 2'd3;
+		force_error_mode = 2'd2;
 		force_error_beat = 2'd0;
 		stream[0] = 32'h8000_4200;
+		ar_before = ar_count;
 		run_stream(1);
-		check(cpu_error === 1'b1, "RLAST missing : the refill ends on the 4th beat with cpu_error");
-		check_no_mismatch("error handling matches the model", before);
-		// error on the victim way : the old line of that way is gone
-		if (CACHE_EN != 0) begin
-			do_reset;
-			stream[0] = 32'h8000_4300;
-			stream[1] = 32'h8000_4300 + WAY_BYTES;
-			run_stream(2); // both ways valid, way 0 is LRU
-			force_error_mode = 2'd1;
-			force_error_beat = 2'd0;
-			stream[0] = 32'h8000_4300 + 2 * WAY_BYTES; // evicts way 0 and fails
-			stream[1] = 32'h8000_4300 + WAY_BYTES; // still a hit
-			stream[2] = 32'h8000_4300; // was evicted
-			before = error_count;
-			ar_before = ar_count;
-			run_stream(3);
-			check(ar_count - ar_before == 2, "failed refill leaves its way invalid, the other way still hits");
-			check_no_mismatch("victim after a failed refill", before);
-		end
+		check(cpu_rdata === memory_word(32'h8000_4200) && ar_count - ar_before == 1,
+			CACHE_EN != 0 ? "RLAST missing : the refill ends on the 4th beat" : "RLAST missing : the bypass read ends on its beat");
+		stream[0] = 32'h8000_421C; // last word of the same line
+		ar_before = ar_count;
+		run_stream(1);
+		check(ar_count - ar_before == (CACHE_EN != 0 ? 0 : 1),
+			CACHE_EN != 0 ? "the line is kept : last word of it hits" : "CACHE_EN=0 : bypass read again");
+		// SLVERR on a bypass read (not cacheable)
+		force_error_mode = 2'd1;
+		force_error_beat = 2'd0;
+		stream[0] = 32'h0000_1244;
+		ar_before = ar_count;
+		run_stream(1);
+		check(cpu_rdata === memory_word(32'h0000_1244) && ar_count - ar_before == 1,
+			"SLVERR on a bypass read : the data is passed on");
+		check_no_mismatch("every fetch matches memory and the reference model", before);
 
 		// --------------------------------------------------------------------
 		$display("\n[T-I10] reset during a refill, clk_enable toggling");
@@ -1127,10 +1081,10 @@ module InstructionCache_tb;
 		check(perf_access == 0 && perf_miss == 0 && perf_stall == 0, "perf_clear zeroes all counters");
 
 		// --------------------------------------------------------------------
-		random_phase("T-I11 TB slave, gated, clk_enable 25% off, errors, FENCE.I", 1'b0, 1'b1, 4, 16, 500);
-		random_phase("T-I11 TB slave, not gated, clk_enable 25% off, errors", 1'b0, 1'b0, 4, 16, 1000);
-		random_phase("T-I11 TB slave, clk_enable on, no errors, FENCE.I", 1'b0, 1'b0, 0, 0, 2000);
-		random_phase("T-I11 DummyDDRMemory, SLVERR window, clk_enable 25% off", 1'b1, 1'b0, 4, 0, 1000);
+		random_phase("T-I11 testbench slave, gated, clk_enable 25% off, SLVERR / RLAST missing injected (ignored), FENCE.I", 1'b0, 1'b1, 4, 16, 500);
+		random_phase("T-I11 testbench slave, not gated, clk_enable 25% off, SLVERR / RLAST missing injected (ignored)", 1'b0, 1'b0, 4, 16, 1000);
+		random_phase("T-I11 testbench slave, clk_enable on, no injection, FENCE.I", 1'b0, 1'b0, 0, 0, 2000);
+		random_phase("T-I11 DummyDDRMemory, SLVERR window (ignored), clk_enable 25% off", 1'b1, 1'b0, 4, 0, 1000);
 
 		$display("\n==================================================================");
 		$display(" fetches checked: %0d, protocol / data / model mismatches: %0d", completed_count, error_count);

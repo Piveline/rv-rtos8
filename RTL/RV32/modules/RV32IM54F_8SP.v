@@ -698,7 +698,6 @@ module RV32IM54F8SP #(
     // Boot ROM fetches are not cached and come from the instruction memory.
     // =========================================================================
     wire [31:0] instruction_cache_cpu_rdata;
-    wire instruction_cache_cpu_error; // AXI error on this fetch (trap hookup : core group)
     wire instruction_cache_fence_i_done;
     wire instruction_cache_fence_i_req;
     wire [31:0] instruction_cache_perf_access;
@@ -1217,7 +1216,6 @@ module RV32IM54F8SP #(
         .perf_clear(1'b0),
         .cpu_rdata(instruction_cache_cpu_rdata),
         .cpu_busy(instruction_cache_cpu_busy),
-        .cpu_error(instruction_cache_cpu_error),
         .fence_i_done(instruction_cache_fence_i_done),
         .perf_access(instruction_cache_perf_access),
         .perf_miss(instruction_cache_perf_miss),
