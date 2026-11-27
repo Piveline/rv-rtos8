@@ -8,6 +8,11 @@
  * - DDR side, 128KB window at 0x8000_0000, chosen per round
  *   round 0, 1 : TB AXI4 slave model with random latency
  *   round 2    : DummyDDRMemory (synthesizable stand-in, fixed 60-cycle read / write latency)
+ * - Hit timing : the same program on DataMemory (BRAM) and on the D-Cache must take the
+ *   same number of cycles, except the cycles the core was frozen by misses
+ * - AXI error handling
+ *   round 0, 1 : RLAST on the wrong beat (early / missing) from the TB model
+ *   round 2    : SLVERR from DummyDDRMemory error mode (refill error, write-back error)
  * - Programs are assembled with llvm-mc (rv32im) and loaded into the instruction memory
  * - Each program ends with a store to DONE_ADDR, then registers / DDR contents are checked
  */
@@ -15,6 +20,7 @@ module RV32IM54F_8SP_data_cache_tb;
     parameter XLEN = 32;
 
     localparam [XLEN-1:0] DONE_ADDR = 32'h1001_0000;
+    localparam [XLEN-1:0] IRQ_ACK_ADDR = 32'h1001_0008;
     localparam integer TIMEOUT = 20000;
     localparam [31:0] HALT = 32'h0000_006F; // jal x0, 0
     localparam integer DUMMY_READ_LATENCY = 60;
@@ -22,6 +28,12 @@ module RV32IM54F_8SP_data_cache_tb;
 
     reg clk;
     reg reset;
+
+    // Timer interrupt raised while the data cache is in the middle of a miss
+    reg timer_irq;
+    reg irq_armed;
+    integer irq_raised_count;
+    integer irq_ack_count;
 
     wire [31:0] retire_instruction;
     wire [XLEN-1:0] MMIO_data_memory_write_data;
@@ -69,7 +81,7 @@ module RV32IM54F_8SP_data_cache_tb;
         .clk_enable(1'b1),
         .reset(reset),
         .UART_busy(1'b0),
-        .timer_interrupt_pending(1'b0),
+        .timer_interrupt_pending(timer_irq),
         .MMIO_read_data({XLEN{1'b0}}),
         .data_cache_m_axi_awready(m_axi_awready),
         .data_cache_m_axi_wready(m_axi_wready),
@@ -80,6 +92,12 @@ module RV32IM54F_8SP_data_cache_tb;
         .data_cache_m_axi_rresp(m_axi_rresp),
         .data_cache_m_axi_rlast(m_axi_rlast),
         .data_cache_m_axi_rvalid(m_axi_rvalid),
+        // instruction cache AXI4 master: the programs run from the Boot ROM (not cached)
+        .instruction_cache_m_axi_arready(1'b0),
+        .instruction_cache_m_axi_rdata(64'h0),
+        .instruction_cache_m_axi_rresp(2'b00),
+        .instruction_cache_m_axi_rlast(1'b0),
+        .instruction_cache_m_axi_rvalid(1'b0),
         .retire_instruction(retire_instruction),
         .MMIO_data_memory_write_data(MMIO_data_memory_write_data),
         .MMIO_data_memory_address(MMIO_data_memory_address),
@@ -105,6 +123,21 @@ module RV32IM54F_8SP_data_cache_tb;
     initial clk = 1'b0;
     always #5 clk = ~clk;
 
+    always @(posedge clk) begin
+        if (reset)
+            timer_irq <= 1'b0;
+        else if (MMIO_data_memory_write_enable && MMIO_data_memory_address == IRQ_ACK_ADDR) begin
+            if (timer_irq) irq_ack_count = irq_ack_count + 1;
+            timer_irq <= 1'b0;
+        end
+        else if (irq_armed && rv32im54f_8sp.data_cache_cpu_busy && rv32im54f_8sp.data_cache.state != 4'd0) begin
+            // the refill / write-back FSM is running : interrupt now
+            timer_irq <= 1'b1;
+            irq_armed = 1'b0;
+            irq_raised_count = irq_raised_count + 1;
+        end
+    end
+
     // Every program ends with a store to DONE_ADDR
     always @(posedge clk) begin
         if (reset)
@@ -126,6 +159,7 @@ module RV32IM54F_8SP_data_cache_tb;
     reg [63:0] model_rdata;
     reg [1:0] model_rresp;
     reg model_rlast;
+    reg [1:0] model_rlast_mode; // 0 : normal, 1 : RLAST on beat 1, 2 : RLAST never asserted
     reg model_rvalid;
     wire model_awvalid = m_axi_awvalid && !use_dummy_ddr;
     wire model_arvalid = m_axi_arvalid && !use_dummy_ddr;
@@ -143,7 +177,11 @@ module RV32IM54F_8SP_data_cache_tb;
     DummyDDRMemory #(
         .ADDRESS_WIDTH(14),
         .READ_LATENCY(DUMMY_READ_LATENCY),
-        .WRITE_LATENCY(DUMMY_WRITE_LATENCY)
+        .WRITE_LATENCY(DUMMY_WRITE_LATENCY),
+        .ERROR_ENABLE(1),
+        .ERROR_ADDRESS_MASK(32'hFFFF_F000),
+        .READ_ERROR_ADDRESS(32'h8001_F000),
+        .WRITE_ERROR_ADDRESS(32'h8001_E000)
     ) dummy_ddr_memory (
         .clk(clk),
         .reset(reset),
@@ -289,6 +327,30 @@ module RV32IM54F_8SP_data_cache_tb;
         end
     end
 
+    function model_rlast_at(input integer beat);
+        begin
+            case (model_rlast_mode)
+                2'd1: model_rlast_at = (beat == 1) || (beat == r_len);
+                2'd2: model_rlast_at = 1'b0;
+                default: model_rlast_at = (beat == r_len);
+            endcase
+        end
+    endfunction
+
+    // D-Cache error responses seen by the core (cpu_error rises once per failed access)
+    integer cache_error_count;
+    reg cache_error_d;
+
+    always @(posedge clk) begin
+        if (reset)
+            cache_error_d <= 1'b0;
+        else begin
+            cache_error_d <= rv32im54f_8sp.data_cache_cpu_error;
+            if (rv32im54f_8sp.data_cache_cpu_error && !cache_error_d)
+                cache_error_count = cache_error_count + 1;
+        end
+    end
+
     // AXI slave : read channel (random latency)
     reg ar_busy;
     reg [31:0] r_addr;
@@ -328,7 +390,7 @@ module RV32IM54F_8SP_data_cache_tb;
             end
             if (ar_busy) begin
                 if (model_rvalid && m_axi_rready) begin
-                    if (model_rlast) begin
+                    if (model_rlast || r_beat == r_len) begin
                         model_rvalid <= 1'b0;
                         model_rlast <= 1'b0;
                         ar_busy <= 1'b0;
@@ -337,7 +399,7 @@ module RV32IM54F_8SP_data_cache_tb;
                         r_beat <= r_beat + 1;
                         if (($random & 1) == 0) begin
                             model_rdata <= ddr[(r_addr[16:3] + r_beat + 1) & 14'h3FFF];
-                            model_rlast <= (r_beat + 1 == r_len);
+                            model_rlast <= model_rlast_at(r_beat + 1);
                         end
                         else begin
                             model_rvalid <= 1'b0;
@@ -349,7 +411,7 @@ module RV32IM54F_8SP_data_cache_tb;
                     if (r_wait == 0) begin
                         model_rvalid <= 1'b1;
                         model_rdata <= ddr[(r_addr[16:3] + r_beat) & 14'h3FFF];
-                        model_rlast <= (r_beat == r_len);
+                        model_rlast <= model_rlast_at(r_beat);
                     end
                     else
                         r_wait <= r_wait - 1;
@@ -731,10 +793,203 @@ module RV32IM54F_8SP_data_cache_tb;
         end
     endtask
 
+    task load_axierr;
+        begin
+            clear_imem;
+            rv32im54f_8sp.instruction_memory.data[0] = 32'h10010fb7; // 0000: lui t6, 0x10010
+            rv32im54f_8sp.instruction_memory.data[1] = 32'h8001f537; // 0004: lui a0, 0x8001f
+            rv32im54f_8sp.instruction_memory.data[2] = 32'h00052603; // 0008: lw a2, 0x0(a0)
+            rv32im54f_8sp.instruction_memory.data[3] = 32'h00052683; // 000c: lw a3, 0x0(a0)
+            rv32im54f_8sp.instruction_memory.data[4] = 32'h800005b7; // 0010: lui a1, 0x80000
+            rv32im54f_8sp.instruction_memory.data[5] = 32'h10058593; // 0014: addi a1, a1, 0x100
+            rv32im54f_8sp.instruction_memory.data[6] = 32'h0005a703; // 0018: lw a4, 0x0(a1)
+            rv32im54f_8sp.instruction_memory.data[7] = 32'h8001e2b7; // 001c: lui t0, 0x8001e
+            rv32im54f_8sp.instruction_memory.data[8] = 32'h05a00313; // 0020: addi t1, zero, 0x5a
+            rv32im54f_8sp.instruction_memory.data[9] = 32'h0062a023; // 0024: sw t1, 0x0(t0)
+            rv32im54f_8sp.instruction_memory.data[10] = 32'h8001a3b7; // 0028: lui t2, 0x8001a
+            rv32im54f_8sp.instruction_memory.data[11] = 32'h0003a783; // 002c: lw a5, 0x0(t2)
+            rv32im54f_8sp.instruction_memory.data[12] = 32'h800163b7; // 0030: lui t2, 0x80016
+            rv32im54f_8sp.instruction_memory.data[13] = 32'h0003a803; // 0034: lw a6, 0x0(t2)
+            rv32im54f_8sp.instruction_memory.data[14] = 32'h0002a883; // 0038: lw a7, 0x0(t0)
+            rv32im54f_8sp.instruction_memory.data[15] = 32'h000fa023; // 003c: sw zero, 0x0(t6)
+            rv32im54f_8sp.instruction_memory.data[16] = 32'h0000006f; // 0040: jal zero, 0x40 <_start+0x40>
+        end
+    endtask
+
+    task load_rlast;
+        begin
+            clear_imem;
+            rv32im54f_8sp.instruction_memory.data[0] = 32'h10010fb7; // 0000: lui t6, 0x10010
+            rv32im54f_8sp.instruction_memory.data[1] = 32'h80007537; // 0004: lui a0, 0x80007
+            rv32im54f_8sp.instruction_memory.data[2] = 32'h00052603; // 0008: lw a2, 0x0(a0)
+            rv32im54f_8sp.instruction_memory.data[3] = 32'h02052683; // 000c: lw a3, 0x20(a0)
+            rv32im54f_8sp.instruction_memory.data[4] = 32'h800005b7; // 0010: lui a1, 0x80000
+            rv32im54f_8sp.instruction_memory.data[5] = 32'h10058593; // 0014: addi a1, a1, 0x100
+            rv32im54f_8sp.instruction_memory.data[6] = 32'h000fa023; // 0018: sw zero, 0x0(t6)
+            rv32im54f_8sp.instruction_memory.data[7] = 32'h0000006f; // 001c: jal zero, 0x1c <_start+0x1c>
+        end
+    endtask
+
+    task load_hit_ddr;
+        begin
+            clear_imem;
+            rv32im54f_8sp.instruction_memory.data[0] = 32'h10010fb7; // 0000: lui t6, 0x10010
+            rv32im54f_8sp.instruction_memory.data[1] = 32'h80004537; // 0004: lui a0, 0x80004
+            rv32im54f_8sp.instruction_memory.data[2] = 32'hb0002a73; // 0008: csrrs s4, mcycle, zero
+            rv32im54f_8sp.instruction_memory.data[3] = 32'h01100293; // 000c: addi t0, zero, 0x11
+            rv32im54f_8sp.instruction_memory.data[4] = 32'h00552023; // 0010: sw t0, 0x0(a0)
+            rv32im54f_8sp.instruction_memory.data[5] = 32'h00052603; // 0014: lw a2, 0x0(a0)
+            rv32im54f_8sp.instruction_memory.data[6] = 32'h02200293; // 0018: addi t0, zero, 0x22
+            rv32im54f_8sp.instruction_memory.data[7] = 32'h03300313; // 001c: addi t1, zero, 0x33
+            rv32im54f_8sp.instruction_memory.data[8] = 32'h00552423; // 0020: sw t0, 0x8(a0)
+            rv32im54f_8sp.instruction_memory.data[9] = 32'h00652423; // 0024: sw t1, 0x8(a0)
+            rv32im54f_8sp.instruction_memory.data[10] = 32'h00852683; // 0028: lw a3, 0x8(a0)
+            rv32im54f_8sp.instruction_memory.data[11] = 32'h0aa00293; // 002c: addi t0, zero, 0xaa
+            rv32im54f_8sp.instruction_memory.data[12] = 32'h005500a3; // 0030: sb t0, 0x1(a0)
+            rv32im54f_8sp.instruction_memory.data[13] = 32'h00052703; // 0034: lw a4, 0x0(a0)
+            rv32im54f_8sp.instruction_memory.data[14] = 32'h01400393; // 0038: addi t2, zero, 0x14
+            rv32im54f_8sp.instruction_memory.data[15] = 32'h00000793; // 003c: addi a5, zero, 0x0
+            rv32im54f_8sp.instruction_memory.data[16] = 32'h00052283; // 0040: lw t0, 0x0(a0)
+            rv32im54f_8sp.instruction_memory.data[17] = 32'h005787b3; // 0044: add a5, a5, t0
+            rv32im54f_8sp.instruction_memory.data[18] = 32'h00852303; // 0048: lw t1, 0x8(a0)
+            rv32im54f_8sp.instruction_memory.data[19] = 32'h00530833; // 004c: add a6, t1, t0
+            rv32im54f_8sp.instruction_memory.data[20] = 32'hfff38393; // 0050: addi t2, t2, -0x1
+            rv32im54f_8sp.instruction_memory.data[21] = 32'hfe0396e3; // 0054: bne t2, zero, 0x40 <_start+0x40>
+            rv32im54f_8sp.instruction_memory.data[22] = 32'hb0002af3; // 0058: csrrs s5, mcycle, zero
+            rv32im54f_8sp.instruction_memory.data[23] = 32'h000fa023; // 005c: sw zero, 0x0(t6)
+            rv32im54f_8sp.instruction_memory.data[24] = 32'h0000006f; // 0060: jal zero, 0x60 <_start+0x60>
+        end
+    endtask
+
+    task load_hit_bram;
+        begin
+            clear_imem;
+            rv32im54f_8sp.instruction_memory.data[0] = 32'h10010fb7; // 0000: lui t6, 0x10010
+            rv32im54f_8sp.instruction_memory.data[1] = 32'h10000537; // 0004: lui a0, 0x10000
+            rv32im54f_8sp.instruction_memory.data[2] = 32'hb0002a73; // 0008: csrrs s4, mcycle, zero
+            rv32im54f_8sp.instruction_memory.data[3] = 32'h01100293; // 000c: addi t0, zero, 0x11
+            rv32im54f_8sp.instruction_memory.data[4] = 32'h00552023; // 0010: sw t0, 0x0(a0)
+            rv32im54f_8sp.instruction_memory.data[5] = 32'h00052603; // 0014: lw a2, 0x0(a0)
+            rv32im54f_8sp.instruction_memory.data[6] = 32'h02200293; // 0018: addi t0, zero, 0x22
+            rv32im54f_8sp.instruction_memory.data[7] = 32'h03300313; // 001c: addi t1, zero, 0x33
+            rv32im54f_8sp.instruction_memory.data[8] = 32'h00552423; // 0020: sw t0, 0x8(a0)
+            rv32im54f_8sp.instruction_memory.data[9] = 32'h00652423; // 0024: sw t1, 0x8(a0)
+            rv32im54f_8sp.instruction_memory.data[10] = 32'h00852683; // 0028: lw a3, 0x8(a0)
+            rv32im54f_8sp.instruction_memory.data[11] = 32'h0aa00293; // 002c: addi t0, zero, 0xaa
+            rv32im54f_8sp.instruction_memory.data[12] = 32'h005500a3; // 0030: sb t0, 0x1(a0)
+            rv32im54f_8sp.instruction_memory.data[13] = 32'h00052703; // 0034: lw a4, 0x0(a0)
+            rv32im54f_8sp.instruction_memory.data[14] = 32'h01400393; // 0038: addi t2, zero, 0x14
+            rv32im54f_8sp.instruction_memory.data[15] = 32'h00000793; // 003c: addi a5, zero, 0x0
+            rv32im54f_8sp.instruction_memory.data[16] = 32'h00052283; // 0040: lw t0, 0x0(a0)
+            rv32im54f_8sp.instruction_memory.data[17] = 32'h005787b3; // 0044: add a5, a5, t0
+            rv32im54f_8sp.instruction_memory.data[18] = 32'h00852303; // 0048: lw t1, 0x8(a0)
+            rv32im54f_8sp.instruction_memory.data[19] = 32'h00530833; // 004c: add a6, t1, t0
+            rv32im54f_8sp.instruction_memory.data[20] = 32'hfff38393; // 0050: addi t2, t2, -0x1
+            rv32im54f_8sp.instruction_memory.data[21] = 32'hfe0396e3; // 0054: bne t2, zero, 0x40 <_start+0x40>
+            rv32im54f_8sp.instruction_memory.data[22] = 32'hb0002af3; // 0058: csrrs s5, mcycle, zero
+            rv32im54f_8sp.instruction_memory.data[23] = 32'h000fa023; // 005c: sw zero, 0x0(t6)
+            rv32im54f_8sp.instruction_memory.data[24] = 32'h0000006f; // 0060: jal zero, 0x60 <_start+0x60>
+        end
+    endtask
+
+    task load_hold;
+        begin
+            clear_imem;
+            rv32im54f_8sp.instruction_memory.data[0] = 32'h10010fb7; // 0000: lui t6, 0x10010
+            rv32im54f_8sp.instruction_memory.data[1] = 32'h80004537; // 0004: lui a0, 0x80004
+            rv32im54f_8sp.instruction_memory.data[2] = 32'h07700293; // 0008: addi t0, zero, 0x77
+            rv32im54f_8sp.instruction_memory.data[3] = 32'h04552423; // 000c: sw t0, 0x48(a0)
+            rv32im54f_8sp.instruction_memory.data[4] = 32'h05500293; // 0010: addi t0, zero, 0x55
+            rv32im54f_8sp.instruction_memory.data[5] = 32'h04552623; // 0014: sw t0, 0x4c(a0)
+            rv32im54f_8sp.instruction_memory.data[6] = 32'h00700313; // 0018: addi t1, zero, 0x7
+            rv32im54f_8sp.instruction_memory.data[7] = 32'h00300393; // 001c: addi t2, zero, 0x3
+            rv32im54f_8sp.instruction_memory.data[8] = 32'h04852603; // 0020: lw a2, 0x48(a0)
+            rv32im54f_8sp.instruction_memory.data[9] = 32'h00000013; // 0024: addi zero, zero, 0x0
+            rv32im54f_8sp.instruction_memory.data[10] = 32'h027346b3; // 0028: div a3, t1, t2
+            rv32im54f_8sp.instruction_memory.data[11] = 32'h00d60733; // 002c: add a4, a2, a3
+            rv32im54f_8sp.instruction_memory.data[12] = 32'h04c52783; // 0030: lw a5, 0x4c(a0)
+            rv32im54f_8sp.instruction_memory.data[13] = 32'h00000013; // 0034: addi zero, zero, 0x0
+            rv32im54f_8sp.instruction_memory.data[14] = 32'h02730833; // 0038: mul a6, t1, t2
+            rv32im54f_8sp.instruction_memory.data[15] = 32'h010788b3; // 003c: add a7, a5, a6
+            rv32im54f_8sp.instruction_memory.data[16] = 32'h000fa023; // 0040: sw zero, 0x0(t6)
+            rv32im54f_8sp.instruction_memory.data[17] = 32'h0000006f; // 0044: jal zero, 0x44 <_start+0x44>
+        end
+    endtask
+
+    task load_irq;
+        begin
+            clear_imem;
+            rv32im54f_8sp.instruction_memory.data[0] = 32'h10010fb7; // 0000: lui t6, 0x10010
+            rv32im54f_8sp.instruction_memory.data[1] = 32'h00000297; // 0004: auipc t0, 0x0
+            rv32im54f_8sp.instruction_memory.data[2] = 32'h07c28293; // 0008: addi t0, t0, 0x7c
+            rv32im54f_8sp.instruction_memory.data[3] = 32'h30529073; // 000c: csrrw zero, mtvec, t0
+            rv32im54f_8sp.instruction_memory.data[4] = 32'h08000293; // 0010: addi t0, zero, 0x80
+            rv32im54f_8sp.instruction_memory.data[5] = 32'h30429073; // 0014: csrrw zero, mie, t0
+            rv32im54f_8sp.instruction_memory.data[6] = 32'h30046073; // 0018: csrrsi zero, mstatus, 0x8
+            rv32im54f_8sp.instruction_memory.data[7] = 32'h00000493; // 001c: addi s1, zero, 0x0
+            rv32im54f_8sp.instruction_memory.data[8] = 32'h80006537; // 0020: lui a0, 0x80006
+            rv32im54f_8sp.instruction_memory.data[9] = 32'h00052603; // 0024: lw a2, 0x0(a0)
+            rv32im54f_8sp.instruction_memory.data[10] = 32'h04052683; // 0028: lw a3, 0x40(a0)
+            rv32im54f_8sp.instruction_memory.data[11] = 32'h08052703; // 002c: lw a4, 0x80(a0)
+            rv32im54f_8sp.instruction_memory.data[12] = 32'h0c052783; // 0030: lw a5, 0xc0(a0)
+            rv32im54f_8sp.instruction_memory.data[13] = 32'h07700313; // 0034: addi t1, zero, 0x77
+            rv32im54f_8sp.instruction_memory.data[14] = 32'h10652023; // 0038: sw t1, 0x100(a0)
+            rv32im54f_8sp.instruction_memory.data[15] = 32'h10052803; // 003c: lw a6, 0x100(a0)
+            rv32im54f_8sp.instruction_memory.data[16] = 32'h00d608b3; // 0040: add a7, a2, a3
+            rv32im54f_8sp.instruction_memory.data[17] = 32'h00e888b3; // 0044: add a7, a7, a4
+            rv32im54f_8sp.instruction_memory.data[18] = 32'h00f888b3; // 0048: add a7, a7, a5
+            rv32im54f_8sp.instruction_memory.data[19] = 32'h010888b3; // 004c: add a7, a7, a6
+            rv32im54f_8sp.instruction_memory.data[20] = 32'h30047073; // 0050: csrrci zero, mstatus, 0x8
+            rv32im54f_8sp.instruction_memory.data[21] = 32'h000fa023; // 0054: sw zero, 0x0(t6)
+            rv32im54f_8sp.instruction_memory.data[22] = 32'h0000006f; // 0058: jal zero, 0x58 <_start+0x58>
+            rv32im54f_8sp.instruction_memory.data[23] = 32'h00000013; // 005c: addi zero, zero, 0x0
+            rv32im54f_8sp.instruction_memory.data[24] = 32'h00000013; // 0060: addi zero, zero, 0x0
+            rv32im54f_8sp.instruction_memory.data[25] = 32'h00000013; // 0064: addi zero, zero, 0x0
+            rv32im54f_8sp.instruction_memory.data[26] = 32'h00000013; // 0068: addi zero, zero, 0x0
+            rv32im54f_8sp.instruction_memory.data[27] = 32'h00000013; // 006c: addi zero, zero, 0x0
+            rv32im54f_8sp.instruction_memory.data[28] = 32'h00000013; // 0070: addi zero, zero, 0x0
+            rv32im54f_8sp.instruction_memory.data[29] = 32'h00000013; // 0074: addi zero, zero, 0x0
+            rv32im54f_8sp.instruction_memory.data[30] = 32'h00000013; // 0078: addi zero, zero, 0x0
+            rv32im54f_8sp.instruction_memory.data[31] = 32'h00000013; // 007c: addi zero, zero, 0x0
+            rv32im54f_8sp.instruction_memory.data[32] = 32'h00148493; // 0080: addi s1, s1, 0x1
+            rv32im54f_8sp.instruction_memory.data[33] = 32'h000fa423; // 0084: sw zero, 0x8(t6)
+            rv32im54f_8sp.instruction_memory.data[34] = 32'h30200073; // 0088: mret
+        end
+    endtask
+
+    task load_stfwd;
+        begin
+            clear_imem;
+            rv32im54f_8sp.instruction_memory.data[0] = 32'h10010fb7; // 0000: lui t6, 0x10010
+            rv32im54f_8sp.instruction_memory.data[1] = 32'h80007537; // 0004: lui a0, 0x80007
+            rv32im54f_8sp.instruction_memory.data[2] = 32'h01100313; // 0008: addi t1, zero, 0x11
+            rv32im54f_8sp.instruction_memory.data[3] = 32'h02200393; // 000c: addi t2, zero, 0x22
+            rv32im54f_8sp.instruction_memory.data[4] = 32'h000062b7; // 0010: lui t0, 0x6
+            rv32im54f_8sp.instruction_memory.data[5] = 32'ha5a28293; // 0014: addi t0, t0, -0x5a6
+            rv32im54f_8sp.instruction_memory.data[6] = 32'h20552023; // 0018: sw t0, 0x200(a0)
+            rv32im54f_8sp.instruction_memory.data[7] = 32'h00128293; // 001c: addi t0, t0, 0x1
+            rv32im54f_8sp.instruction_memory.data[8] = 32'h24552023; // 0020: sw t0, 0x240(a0)
+            rv32im54f_8sp.instruction_memory.data[9] = 32'h00730433; // 0024: add s0, t1, t2
+            rv32im54f_8sp.instruction_memory.data[10] = 32'h28852023; // 0028: sw s0, 0x280(a0)
+            rv32im54f_8sp.instruction_memory.data[11] = 32'h123452b7; // 002c: lui t0, 0x12345
+            rv32im54f_8sp.instruction_memory.data[12] = 32'h2c551123; // 0030: sh t0, 0x2c2(a0)
+            rv32im54f_8sp.instruction_memory.data[13] = 32'h20052603; // 0034: lw a2, 0x200(a0)
+            rv32im54f_8sp.instruction_memory.data[14] = 32'h24052683; // 0038: lw a3, 0x240(a0)
+            rv32im54f_8sp.instruction_memory.data[15] = 32'h28052703; // 003c: lw a4, 0x280(a0)
+            rv32im54f_8sp.instruction_memory.data[16] = 32'h2c052783; // 0040: lw a5, 0x2c0(a0)
+            rv32im54f_8sp.instruction_memory.data[17] = 32'h000fa023; // 0044: sw zero, 0x0(t6)
+            rv32im54f_8sp.instruction_memory.data[18] = 32'h0000006f; // 0048: jal zero, 0x48 <_start+0x48>
+        end
+    endtask
+
     // ------------------------------------------------------------------------
     // Test sequence
     // ------------------------------------------------------------------------
     integer round;
+    integer errors0;
+    integer bram_cycles;
+    integer bram_mcycle;
+    integer ddr_stall;
     integer ar0;
     integer aw0;
 
@@ -745,6 +1000,11 @@ module RV32IM54F_8SP_data_cache_tb;
         ar_count = 0;
         aw_count = 0;
         use_dummy_ddr = 1'b0;
+        model_rlast_mode = 2'd0;
+        cache_error_count = 0;
+        irq_armed = 1'b0;
+        irq_raised_count = 0;
+        irq_ack_count = 0;
         read_latency_error = 0;
         write_latency_error = 0;
         read_latency_count = 0;
@@ -845,9 +1105,83 @@ module RV32IM54F_8SP_data_cache_tb;
             check_ddr("burst", 32'h8000_340C, 32'h22);
             check_ddr("burst", 32'h8000_3410, 32'h33);
             check_ddr("burst", 32'h8000_341C, 32'h44);
+
+            $display("[TB] 10. hit timing : D$ hits cost no extra cycle compared with DataMemory (BRAM)");
+            load_hit_bram;
+            run_program("hit bram");
+            bram_cycles = cycles;
+            bram_mcycle = rv32im54f_8sp.register_file.registers[21] - rv32im54f_8sp.register_file.registers[20];
+            load_hit_ddr;
+            run_program("hit ddr");
+            ddr_stall = rv32im54f_8sp.data_cache_perf_stall;
+            check_reg("hit ddr", 12, 32'h0000_0011);
+            check_reg("hit ddr", 13, 32'h0000_0033);
+            check_reg("hit ddr", 14, 32'h0000_AA11);
+            check_reg("hit ddr", 15, 32'h000D_4954);
+            check_reg("hit ddr", 16, 32'h0000_AA44);
+            check_value("hit ddr", "D$ misses", 1, rv32im54f_8sp.data_cache_perf_miss);
+            check_value("hit ddr", "cycles - miss stall", bram_cycles, cycles - ddr_stall);
+            check_value("hit ddr", "mcycle - miss stall", bram_mcycle,
+                rv32im54f_8sp.register_file.registers[21] - rv32im54f_8sp.register_file.registers[20] - ddr_stall);
+
+            $display("[TB] 10-2. load hit kept in MEM while div / mul stall the pipeline");
+            load_hold;
+            run_program("hold");
+            check_reg("hold", 12, 32'h0000_0077);
+            check_reg("hold", 14, 32'h0000_0079);
+            check_reg("hold", 15, 32'h0000_0055);
+            check_reg("hold", 17, 32'h0000_006A);
+
+            $display("[TB] 10-4. store miss whose data is forwarded from the instruction right before it");
+            load_stfwd;
+            run_program("stfwd");
+            check_reg("stfwd", 12, 32'h0000_5A5A);
+            check_reg("stfwd", 13, 32'h0000_5A5B);
+            check_reg("stfwd", 14, 32'h0000_0033);
+            check_reg("stfwd", 15, 32'h5000_72C0);
+
+            $display("[TB] 10-3. timer interrupt taken while a D$ miss is in progress");
+            load_irq;
+            irq_armed = 1'b1;
+            errors0 = irq_ack_count;
+            run_program("irq");
+            irq_armed = 1'b0;
+            check_value("irq", "interrupts handled", 1, irq_ack_count - errors0);
+            check_reg("irq", 9, 32'h0000_0001);
+            check_reg("irq", 12, 32'h8000_6000);
+            check_reg("irq", 15, 32'h8000_60C0);
+            check_reg("irq", 16, 32'h0000_0077);
+            check_reg("irq", 17, 32'h0001_81F7);
+
+            if (!use_dummy_ddr) begin
+                $display("[TB] 11. RLAST on the wrong beat : refill ends, error reported, core does not hang");
+                load_rlast;
+                model_rlast_mode = 2'd1;
+                errors0 = cache_error_count;
+                run_program("rlast early");
+                check_value("rlast early", "D$ errors", 2, cache_error_count - errors0);
+                model_rlast_mode = 2'd2;
+                errors0 = cache_error_count;
+                run_program("rlast missing");
+                check_value("rlast missing", "D$ errors", 2, cache_error_count - errors0);
+                check_value("rlast missing", "D$ misses", 2, rv32im54f_8sp.data_cache_perf_miss);
+                model_rlast_mode = 2'd0;
+            end
+            else begin
+                $display("[TB] 11. SLVERR : refill error line is dropped, write-back error keeps the dirty line");
+                errors0 = cache_error_count;
+                load_axierr;
+                run_program("axierr");
+                check_value("axierr", "D$ errors", 3, cache_error_count - errors0);
+                check_value("axierr", "D$ misses", 6, rv32im54f_8sp.data_cache_perf_miss);
+                check_reg("axierr", 14, 32'h8000_0100);
+                check_reg("axierr", 15, 32'h8001_A000);
+                check_reg("axierr", 17, 32'h0000_005A);
+                check_ddr("axierr", 32'h8001_E000, 32'h8001_E000);
+            end
         end
 
-        $display("[TB] 10. DummyDDRMemory latency (measured on every burst of round 2)");
+        $display("[TB] 12. DummyDDRMemory latency (measured on every burst of round 2)");
         check_value("dummy", "read bursts seen", 1, read_latency_count > 0);
         check_value("dummy", "write bursts seen", 1, write_latency_count > 0);
         check_value("dummy", "read latency errors", 0, read_latency_error);

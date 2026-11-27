@@ -6,7 +6,23 @@
  * - AXI4 Bus Master Interface (64-bit data, INCR burst x 4 beat)
  * - FENCE.I : CLEAN (dirty write-back, valid kept)
  * - INVAL : write-back + invalidate all (MMIO cold flush)
- * - Interface style follows the instruction cache (feat/icache)
+ * - AXI error handling
+ *   RRESP error on refill : line is not kept (valid=0), request ends with cpu_error
+ *   BRESP error on victim write-back : refill is aborted, victim stays dirty, cpu_error
+ *   BRESP error on FENCE.I / INVAL write-back : line stays dirty and valid, scan_error
+ *   Refill ends on the 4th beat or on RLAST, whichever comes first;
+ *   RLAST on the wrong beat is an error (the core never waits forever on a missing RLAST)
+ * - valid / dirty / LRU of a set are kept in one small distributed RAM (5 bits per set);
+ *   it is cleared one set per cycle after reset (STATE_INIT, NUM_SETS cycles). A MEM access
+ *   that arrives during INIT waits (cpu_busy), everything else in the core keeps running.
+ * - Pipeline interface (same timing as the old BRAM data memory)
+ *   EX2 : lookup_address is read from the data array when mem_advance = 1
+ *   MEM : tag compare; a load hit returns cpu_rdata in the same cycle (no stall)
+ *         a store hit writes the array in its first MEM cycle and reports
+ *         cpu_store_done in the second (same 2-phase store as the old data memory)
+ *   miss : cpu_busy = 1 until the line is in; the core stalls on cpu_busy
+ *          (HazardUnit / ControlUnit cache_stall), then the line is read again (RELOOKUP) and the
+ *          access finishes as a hit
  */
 module DataCache #(
     parameter NUM_SETS = 512, // 16 ~ 512 (1KB ~ 32KB), power of 2
@@ -19,9 +35,11 @@ module DataCache #(
     input wire clk_enable,
 
     // CPU Core -> D-Cache
-    input wire cpu_req_valid,
+    input wire mem_advance, // MEM takes a new instruction at this edge (array is read for lookup_address)
+    input wire [31:0] lookup_address, // EX2 address
+    input wire cpu_req_valid, // MEM holds a cacheable-region access (level)
     input wire cpu_req_we, // 0 : LOAD, 1 : STORE
-    input wire [31:0] cpu_req_addr,
+    input wire [31:0] cpu_req_addr, // MEM address
     input wire [31:0] cpu_req_wdata,
     input wire [3:0] cpu_req_wstrb, // byte enable (write_mask)
 
@@ -43,12 +61,15 @@ module DataCache #(
 
     // ==================== OUTPUTS ====================
     // D-Cache -> CPU Core
-    output reg [31:0] cpu_rdata, // aligned word (byte extract / sign-ext in core)
-    output reg cpu_ready, // 1-cycle pulse : request done
+    output wire [31:0] cpu_rdata, // aligned word for the MEM access (byte extract / sign-ext in core)
+    output wire cpu_busy, // 1 : the MEM access is not finished, stall the pipeline
+    output wire cpu_store_done, // 0 : first cycle of a store (2-phase store, same as the old data memory)
+    output wire cpu_error, // the MEM access ended with an AXI error, cpu_rdata is not valid
 
     // Control
     output reg fence_i_done, // 1-cycle pulse after last BRESP
     output reg inval_done, // 1-cycle pulse
+    output reg scan_error, // with fence_i_done / inval_done : a write-back got an error response
 
     // Performance counters
     output reg [31:0] perf_access,
@@ -79,7 +100,7 @@ module DataCache #(
     localparam TAG_BITS = 32 - 5 - INDEX_BITS;
 
     localparam STATE_IDLE = 4'd0;
-    localparam STATE_LOOKUP = 4'd1;
+    localparam STATE_INIT = 4'd1; // clear valid / dirty / LRU after reset, one set per cycle
     localparam STATE_WB_READ = 4'd2; // victim line -> wb_buf (4 beats)
     localparam STATE_WB_AW = 4'd3;
     localparam STATE_WB_W = 4'd4;
@@ -93,6 +114,7 @@ module DataCache #(
     localparam STATE_BYPASS_B = 4'd12;
     localparam STATE_SCAN = 4'd13; // FENCE.I / INVAL set-way walk
     localparam STATE_SCAN_WAIT = 4'd14; // wait for req to drop after done pulse
+    localparam STATE_RELOOKUP = 4'd15; // read the MEM address again after a refill / scan
 
     reg [3:0] state;
 
@@ -127,11 +149,14 @@ module DataCache #(
     // Tag / State Arrays
     reg [TAG_BITS-1:0] tag_ram_w0 [0:NUM_SETS-1];
     reg [TAG_BITS-1:0] tag_ram_w1 [0:NUM_SETS-1];
-    reg valid_w0 [0:NUM_SETS-1];
-    reg valid_w1 [0:NUM_SETS-1];
-    reg dirty_w0 [0:NUM_SETS-1];
-    reg dirty_w1 [0:NUM_SETS-1];
-    reg lru_bit [0:NUM_SETS-1]; // way to evict next
+    // Per-set state : {lru (way to evict next), dirty_w1, dirty_w0, valid_w1, valid_w0}
+    localparam META_VALID_W0 = 0;
+    localparam META_VALID_W1 = 1;
+    localparam META_DIRTY_W0 = 2;
+    localparam META_DIRTY_W1 = 3;
+    localparam META_LRU = 4;
+    (* ram_style = "distributed" *) reg [4:0] meta_ram [0:NUM_SETS-1];
+    reg [INDEX_BITS-1:0] init_set;
 
     // Data Arrays (32B line = 4 x 64-bit)
     (* ram_style = "block" *) reg [63:0] data_ram_w0 [0:(NUM_SETS*4)-1];
@@ -152,13 +177,34 @@ module DataCache #(
     reg scan_inval;
 
     reg [1:0] burst_cnt;
+    reg refill_error; // error response or RLAST on the wrong beat seen during this refill
+    reg scan_error_seen; // a FENCE.I / INVAL write-back got an error response
+    reg scan_done_pending; // scan finished, done pulse goes out after RELOOKUP
+
+    // Result of the access currently in MEM (cleared when MEM takes a new instruction)
+    reg served; // finished by the FSM (bypass access or AXI error) : answer is in served_rdata
+    reg served_error;
+    reg [31:0] served_rdata;
+    reg store_written; // store hit already written (second MEM cycle of the store)
+
+    // AXI response : SLVERR (10) and DECERR (11) are errors
+    wire refill_beat = (state == STATE_ALLOC_R) && m_axi_rvalid && m_axi_rready;
+    wire refill_last_beat = m_axi_rlast || (burst_cnt == 2'd3);
+    wire refill_beat_error = m_axi_rresp[1] || (m_axi_rlast != (burst_cnt == 2'd3));
+    wire refill_failed = refill_error || refill_beat_error;
 
     // Synchronous BRAM Read (1-cycle latency)
+    // EX2 address on mem_advance, victim beats in WB_READ, MEM address in RELOOKUP.
+    // Otherwise the registers keep the word of the instruction in MEM.
     reg [63:0] read_data_w0, read_data_w1;
+    wire [INDEX_BITS-1:0] lookup_idx = lookup_address[5+INDEX_BITS-1:5];
+    wire [INDEX_BITS-1:0] mem_idx = cpu_req_addr[5+INDEX_BITS-1:5];
     wire [INDEX_BITS+1:0] ram_read_idx = (state == STATE_WB_READ) ? {wb_idx, wb_rd_cnt[1:0]}
-        : {a_idx, a_offset[4:3]};
+        : (state == STATE_RELOOKUP) ? {mem_idx, cpu_req_addr[4:3]}
+        : {lookup_idx, lookup_address[4:3]};
+    wire ram_read_enable = (state == STATE_WB_READ) || (state == STATE_RELOOKUP) || mem_advance;
     always @(posedge clk) begin
-        if (clk_enable) begin
+        if (clk_enable && ram_read_enable) begin
             read_data_w0 <= data_ram_w0[ram_read_idx];
             read_data_w1 <= data_ram_w1[ram_read_idx];
         end
@@ -178,27 +224,51 @@ module DataCache #(
     assign m_axi_wlast = (state == STATE_BYPASS_W) ? 1'b1 : (wb_cnt == 2'd3);
     assign m_axi_bready = (state == STATE_WB_B) || (state == STATE_BYPASS_B);
 
+    // Per-set state read (one read address : the scan set during FENCE.I / INVAL, else the access set)
+    wire meta_from_scan = (state == STATE_SCAN) || (wb_from_scan &&
+        ((state == STATE_WB_READ) || (state == STATE_WB_AW) || (state == STATE_WB_W) || (state == STATE_WB_B)));
+    wire [INDEX_BITS-1:0] meta_idx = meta_from_scan ? scan_set : a_idx;
+    wire [4:0] meta = meta_ram[meta_idx];
+    wire meta_valid_w0 = meta[META_VALID_W0];
+    wire meta_valid_w1 = meta[META_VALID_W1];
+    wire meta_dirty_w0 = meta[META_DIRTY_W0];
+    wire meta_dirty_w1 = meta[META_DIRTY_W1];
+    wire meta_lru = meta[META_LRU];
+
     // Lookup helpers
-    wire hit_w0 = valid_w0[a_idx] && (tag_ram_w0[a_idx] == a_tag);
-    wire hit_w1 = valid_w1[a_idx] && (tag_ram_w1[a_idx] == a_tag);
-    wire target_way_comb = valid_w0[a_idx] ? (valid_w1[a_idx] ? lru_bit[a_idx] : 1'b1) : 1'b0;
-    wire victim_dirty_comb = target_way_comb ? (valid_w1[a_idx] && dirty_w1[a_idx])
-        : (valid_w0[a_idx] && dirty_w0[a_idx]);
+    wire hit_w0 = meta_valid_w0 && (tag_ram_w0[a_idx] == a_tag);
+    wire hit_w1 = meta_valid_w1 && (tag_ram_w1[a_idx] == a_tag);
+    wire target_way_comb = meta_valid_w0 ? (meta_valid_w1 ? meta_lru : 1'b1) : 1'b0;
+    wire victim_dirty_comb = target_way_comb ? (meta_valid_w1 && meta_dirty_w1)
+        : (meta_valid_w0 && meta_dirty_w0);
     wire [TAG_BITS-1:0] victim_tag_comb = target_way_comb ? tag_ram_w1[a_idx] : tag_ram_w0[a_idx];
 
+    // MEM stage : hit check on the word read at the EX2 -> MEM edge
+    wire mem_hit = hit_w0 || hit_w1; // a_* follow cpu_req_addr in IDLE
+    wire [63:0] mem_hit_data = hit_w0 ? read_data_w0 : read_data_w1;
+    wire [31:0] mem_hit_word = cpu_req_addr[2] ? mem_hit_data[63:32] : mem_hit_data[31:0];
+    wire mem_need_fsm = cpu_req_valid && !served && (!a_cacheable || !mem_hit);
+    wire store_hit_write = (state == STATE_IDLE) && cpu_req_valid && cpu_req_we && a_cacheable &&
+        mem_hit && !served && !store_written;
+
+    assign cpu_busy = ((state != STATE_IDLE) && (state != STATE_SCAN_WAIT) && (state != STATE_INIT)) ||
+        ((state == STATE_INIT) && cpu_req_valid) ||
+        ((state == STATE_IDLE) && (fence_i_req || inval_req || mem_need_fsm));
+    assign cpu_rdata = served ? served_rdata : mem_hit_word;
+    assign cpu_error = served && served_error;
+    assign cpu_store_done = !(cpu_req_valid && cpu_req_we) || served || store_written;
+
+    // MEM store word placed on the 64-bit lane (hit path uses the live MEM inputs)
+    wire [63:0] mem_store_data64 = {cpu_req_wdata, cpu_req_wdata};
+    wire [7:0] mem_store_strb8 = cpu_req_addr[2] ? {cpu_req_wstrb, 4'b0000} : {4'b0000, cpu_req_wstrb};
+
     // Scan helpers
-    wire scan_valid = scan_way ? valid_w1[scan_set] : valid_w0[scan_set];
-    wire scan_dirty = scan_way ? dirty_w1[scan_set] : dirty_w0[scan_set];
+    wire scan_valid = scan_way ? meta_valid_w1 : meta_valid_w0;
+    wire scan_dirty = scan_way ? meta_dirty_w1 : meta_dirty_w0;
     wire scan_last = scan_way && (scan_set == NUM_SETS-1);
 
     // Extracted target word from AXI refill
     wire [63:0] current_extracted_data = (burst_cnt == a_offset[4:3]) ? m_axi_rdata : latched_axi_data;
-
-    // Miss-service states counted as stall cycles
-    wire in_miss_service = (state == STATE_WB_READ) || (state == STATE_WB_AW) || (state == STATE_WB_W) ||
-        (state == STATE_WB_B) || (state == STATE_ALLOC_AR) || (state == STATE_ALLOC_R) ||
-        (state == STATE_BYPASS_AR) || (state == STATE_BYPASS_R) ||
-        (state == STATE_BYPASS_AW) || (state == STATE_BYPASS_W) || (state == STATE_BYPASS_B);
 
     // Data RAM write port
     // kept in a reset-free block so that Vivado can map the arrays to BRAM
@@ -213,21 +283,19 @@ module DataCache #(
         data_waddr = {a_idx, a_offset[4:3]};
         data_wdata = 64'h0;
         if (!reset && clk_enable) begin
-            if (state == STATE_LOOKUP && a_cacheable && latched_we && (hit_w0 || hit_w1)) begin
-                // STORE hit : merge bytes into the word read during IDLE
+            if (store_hit_write) begin
+                // STORE hit : merge bytes into the word read at the EX2 -> MEM edge
                 data_we_w0 = hit_w0;
                 data_we_w1 = !hit_w0;
-                data_wdata = merge_bytes(hit_w0 ? read_data_w0 : read_data_w1, store_data64, store_strb8);
+                data_waddr = {mem_idx, cpu_req_addr[4:3]};
+                data_wdata = merge_bytes(mem_hit_data, mem_store_data64, mem_store_strb8);
             end
             else if (state == STATE_ALLOC_R && m_axi_rvalid && m_axi_rready) begin
-                // refill beat, STORE miss merges into the target beat
+                // refill beat (a STORE miss is written as a hit after RELOOKUP)
                 data_we_w0 = (latched_target_way == 1'b0);
                 data_we_w1 = (latched_target_way == 1'b1);
                 data_waddr = {a_idx, burst_cnt};
-                if (latched_we && burst_cnt == a_offset[4:3])
-                    data_wdata = merge_bytes(m_axi_rdata, store_data64, store_strb8);
-                else
-                    data_wdata = m_axi_rdata;
+                data_wdata = m_axi_rdata;
             end
         end
     end
@@ -238,22 +306,95 @@ module DataCache #(
     end
 
     // Tag RAM write port (end of refill)
-    wire tag_we = !reset && clk_enable && (state == STATE_ALLOC_R) && m_axi_rvalid && m_axi_rready && m_axi_rlast;
+    wire tag_we = !reset && clk_enable && refill_beat && refill_last_beat;
 
     always @(posedge clk) begin
         if (tag_we && latched_target_way == 1'b0) tag_ram_w0[a_idx] <= a_tag;
         if (tag_we && latched_target_way == 1'b1) tag_ram_w1[a_idx] <= a_tag;
     end
 
+    // Per-set state write port (at most one set changes per cycle)
+    reg meta_we;
+    reg [INDEX_BITS-1:0] meta_widx;
+    reg [4:0] meta_wdata;
+
+    always @(*) begin
+        meta_we = 1'b0;
+        meta_widx = meta_idx;
+        meta_wdata = meta;
+        if (!reset && clk_enable) begin
+            case (state)
+                STATE_INIT: begin
+                    meta_we = 1'b1;
+                    meta_widx = init_set;
+                    meta_wdata = 5'b00000;
+                end
+                STATE_IDLE: begin
+                    if (!fence_i_req && !inval_req && cpu_req_valid && !served && a_cacheable && mem_hit) begin
+                        meta_we = 1'b1;
+                        meta_wdata[META_LRU] = hit_w0;
+                        if (store_hit_write) begin
+                            if (hit_w0) meta_wdata[META_DIRTY_W0] = 1'b1;
+                            else meta_wdata[META_DIRTY_W1] = 1'b1;
+                        end
+                    end
+                end
+                STATE_ALLOC_R: begin
+                    if (refill_beat && refill_last_beat) begin
+                        meta_we = 1'b1;
+                        if (latched_target_way == 1'b0) begin
+                            meta_wdata[META_VALID_W0] = !refill_failed;
+                            meta_wdata[META_DIRTY_W0] = 1'b0;
+                        end else begin
+                            meta_wdata[META_VALID_W1] = !refill_failed;
+                            meta_wdata[META_DIRTY_W1] = 1'b0;
+                        end
+                        if (!refill_failed) meta_wdata[META_LRU] = ~latched_target_way;
+                    end
+                end
+                STATE_WB_B: begin
+                    if (m_axi_bvalid && !m_axi_bresp[1]) begin
+                        // write-back accepted : the line is clean (and gone for INVAL)
+                        meta_we = 1'b1;
+                        if (wb_way) meta_wdata[META_DIRTY_W1] = 1'b0;
+                        else meta_wdata[META_DIRTY_W0] = 1'b0;
+                        if (wb_from_scan && scan_inval) begin
+                            if (scan_way) meta_wdata[META_VALID_W1] = 1'b0;
+                            else meta_wdata[META_VALID_W0] = 1'b0;
+                        end
+                    end
+                end
+                STATE_SCAN: begin
+                    if (!(scan_valid && scan_dirty) && scan_inval) begin
+                        meta_we = 1'b1;
+                        if (scan_way) meta_wdata[META_VALID_W1] = 1'b0;
+                        else meta_wdata[META_VALID_W0] = 1'b0;
+                    end
+                end
+                default: ;
+            endcase
+        end
+    end
+
+    always @(posedge clk) begin
+        if (meta_we) meta_ram[meta_widx] <= meta_wdata;
+    end
+
     integer i;
 
     always @(posedge clk or posedge reset) begin
         if (reset) begin
-            state <= STATE_IDLE;
-            cpu_ready <= 1'b0;
-            cpu_rdata <= 32'h0;
+            state <= STATE_INIT;
+            served <= 1'b0;
+            served_error <= 1'b0;
+            served_rdata <= 32'h0;
+            store_written <= 1'b0;
+            scan_done_pending <= 1'b0;
             fence_i_done <= 1'b0;
             inval_done <= 1'b0;
+            scan_error <= 1'b0;
+            refill_error <= 1'b0;
+            scan_error_seen <= 1'b0;
             m_axi_arvalid <= 1'b0;
             m_axi_araddr <= 32'h0;
             m_axi_awvalid <= 1'b0;
@@ -279,13 +420,7 @@ module DataCache #(
             perf_miss <= 32'h0;
             perf_wb <= 32'h0;
             perf_stall <= 32'h0;
-            for (i = 0; i < NUM_SETS; i = i + 1) begin
-                valid_w0[i] <= 1'b0;
-                valid_w1[i] <= 1'b0;
-                dirty_w0[i] <= 1'b0;
-                dirty_w1[i] <= 1'b0;
-                lru_bit[i] <= 1'b0;
-            end
+            init_set <= {INDEX_BITS{1'b0}};
         end else if (clk_enable) begin
 
             if (perf_clear) begin
@@ -293,49 +428,46 @@ module DataCache #(
                 perf_miss <= 32'h0;
                 perf_wb <= 32'h0;
                 perf_stall <= 32'h0;
-            end else if (in_miss_service && !wb_from_scan) begin
+            end else if (cpu_busy && !wb_from_scan && !scan_done_pending &&
+                (state != STATE_SCAN) && !(state == STATE_IDLE && (fence_i_req || inval_req))) begin
                 perf_stall <= perf_stall + 32'd1;
             end
 
-            case (state)
-                STATE_IDLE: begin
-                    cpu_ready <= 1'b0;
+            // MEM takes a new instruction : forget the result of the previous one
+            if (mem_advance) begin
+                served <= 1'b0;
+                served_error <= 1'b0;
+                store_written <= 1'b0;
+                if (cpu_req_valid && a_cacheable && !perf_clear) perf_access <= perf_access + 32'd1;
+            end
 
+            case (state)
+                STATE_INIT: begin
+                    init_set <= init_set + 1'b1;
+                    if (init_set == NUM_SETS - 1) state <= STATE_IDLE;
+                end
+
+                STATE_IDLE: begin
                     if (fence_i_req || inval_req) begin
-                        // In-flight request is already finished (only checked in IDLE)
+                        // the access in MEM (if any) is finished or frozen; RELOOKUP restores its word
                         scan_set <= {INDEX_BITS{1'b0}};
                         scan_way <= 1'b0;
                         scan_inval <= inval_req;
+                        scan_error_seen <= 1'b0;
                         state <= STATE_SCAN;
                     end
-                    else if (cpu_req_valid) begin
+                    else if (cpu_req_valid && !served && a_cacheable && mem_hit) begin
+                        // HIT : load data goes out combinationally, store writes once
+                        // LRU / dirty are written by the per-set state write port below
+                        if (store_hit_write) store_written <= 1'b1;
+                    end
+                    else if (mem_need_fsm) begin
                         latched_addr <= cpu_req_addr;
                         latched_we <= cpu_req_we;
                         latched_wdata <= cpu_req_wdata;
                         latched_wstrb <= cpu_req_wstrb;
                         wb_from_scan <= 1'b0;
-                        state <= STATE_LOOKUP;
-                    end
-                end
-
-                STATE_LOOKUP: begin
-                    if (a_cacheable) begin
-                        if (!perf_clear) perf_access <= perf_access + 32'd1;
-
-                        if (hit_w0 || hit_w1) begin
-                            // HIT
-                            if (latched_we) begin
-                                // data word is written by the data RAM write port below
-                                if (hit_w0) dirty_w0[a_idx] <= 1'b1;
-                                else dirty_w1[a_idx] <= 1'b1;
-                            end else begin
-                                if (hit_w0) cpu_rdata <= a_offset[2] ? read_data_w0[63:32] : read_data_w0[31:0];
-                                else cpu_rdata <= a_offset[2] ? read_data_w1[63:32] : read_data_w1[31:0];
-                            end
-                            lru_bit[a_idx] <= hit_w0 ? 1'b1 : 1'b0;
-                            cpu_ready <= 1'b1;
-                            state <= STATE_IDLE;
-                        end else begin
+                        if (a_cacheable) begin
                             // MISS (write-allocate for both LOAD and STORE)
                             if (!perf_clear) perf_miss <= perf_miss + 32'd1;
                             latched_target_way <= target_way_comb;
@@ -343,26 +475,38 @@ module DataCache #(
                                 wb_idx <= a_idx;
                                 wb_way <= target_way_comb;
                                 wb_tag <= victim_tag_comb;
-                                wb_from_scan <= 1'b0;
                                 wb_rd_cnt <= 3'd0;
                                 state <= STATE_WB_READ;
                             end else begin
                                 m_axi_arvalid <= 1'b1;
-                                m_axi_araddr <= {latched_addr[31:5], 5'b00000};
+                                m_axi_araddr <= {cpu_req_addr[31:5], 5'b00000};
                                 state <= STATE_ALLOC_AR;
                             end
-                        end
-                    end else begin
-                        // BYPASS (MMIO-free uncached path : single beat)
-                        if (latched_we) begin
-                            m_axi_awvalid <= 1'b1;
-                            m_axi_awaddr <= {latched_addr[31:3], 3'b000};
-                            state <= STATE_BYPASS_AW;
                         end else begin
-                            m_axi_arvalid <= 1'b1;
-                            m_axi_araddr <= {latched_addr[31:3], 3'b000};
-                            state <= STATE_BYPASS_AR;
+                            // BYPASS (uncached single beat)
+                            if (cpu_req_we) begin
+                                m_axi_awvalid <= 1'b1;
+                                m_axi_awaddr <= {cpu_req_addr[31:3], 3'b000};
+                                state <= STATE_BYPASS_AW;
+                            end else begin
+                                m_axi_arvalid <= 1'b1;
+                                m_axi_araddr <= {cpu_req_addr[31:3], 3'b000};
+                                state <= STATE_BYPASS_AR;
+                            end
                         end
+                    end
+                end
+
+                STATE_RELOOKUP: begin
+                    // ram_read_idx = MEM address this cycle; the access finishes as a hit next cycle
+                    if (scan_done_pending) begin
+                        scan_done_pending <= 1'b0;
+                        if (scan_inval) inval_done <= 1'b1;
+                        else fence_i_done <= 1'b1;
+                        scan_error <= scan_error_seen;
+                        state <= STATE_SCAN_WAIT;
+                    end else begin
+                        state <= STATE_IDLE;
                     end
                 end
 
@@ -400,24 +544,28 @@ module DataCache #(
 
                 STATE_WB_B: begin
                     if (m_axi_bvalid) begin
-                        if (!perf_clear) perf_wb <= perf_wb + 32'd1;
-                        if (wb_way) dirty_w1[wb_idx] <= 1'b0;
-                        else dirty_w0[wb_idx] <= 1'b0;
+                        if (!m_axi_bresp[1]) begin
+                            // write-back accepted : the line is clean now
+                            if (!perf_clear) perf_wb <= perf_wb + 32'd1;
+                        end
 
                         if (wb_from_scan) begin
-                            if (scan_inval) begin
-                                if (scan_way) valid_w1[scan_set] <= 1'b0;
-                                else valid_w0[scan_set] <= 1'b0;
-                            end
+                            // on an error the line stays dirty and valid (data is not lost)
+                            if (m_axi_bresp[1])
+                                scan_error_seen <= 1'b1;
                             if (scan_last) begin
-                                if (scan_inval) inval_done <= 1'b1;
-                                else fence_i_done <= 1'b1;
-                                state <= STATE_SCAN_WAIT;
+                                scan_done_pending <= 1'b1;
+                                state <= STATE_RELOOKUP;
                             end else begin
                                 if (scan_way) scan_set <= scan_set + 1'b1;
                                 scan_way <= ~scan_way;
                                 state <= STATE_SCAN;
                             end
+                        end else if (m_axi_bresp[1]) begin
+                            // victim could not be written back : keep it and give up this request
+                            served <= 1'b1;
+                            served_error <= 1'b1;
+                            state <= STATE_IDLE;
                         end else begin
                             m_axi_arvalid <= 1'b1;
                             m_axi_araddr <= {latched_addr[31:5], 5'b00000};
@@ -431,30 +579,30 @@ module DataCache #(
                     if (m_axi_arready && m_axi_arvalid) begin
                         m_axi_arvalid <= 1'b0;
                         burst_cnt <= 2'b0;
+                        refill_error <= 1'b0;
                         state <= STATE_ALLOC_R;
                     end
                 end
 
                 STATE_ALLOC_R: begin
-                    if (m_axi_rvalid && m_axi_rready) begin
+                    if (refill_beat) begin
                         // each beat is written by the data RAM write port below
                         if (burst_cnt == a_offset[4:3]) latched_axi_data <= m_axi_rdata;
                         burst_cnt <= burst_cnt + 2'd1;
+                        if (refill_beat_error) refill_error <= 1'b1;
 
-                        if (m_axi_rlast) begin
+                        if (refill_last_beat) begin
                             // tag is written by the tag RAM write port below
-                            if (latched_target_way == 1'b0) begin
-                                valid_w0[a_idx] <= 1'b1;
-                                dirty_w0[a_idx] <= latched_we;
+                            if (refill_failed) begin
+                                // broken line : not kept (per-set state write port), the victim was already clean
+                                served <= 1'b1;
+                                served_error <= 1'b1;
+                                served_rdata <= a_offset[2] ? current_extracted_data[63:32] : current_extracted_data[31:0];
+                                state <= STATE_IDLE;
                             end else begin
-                                valid_w1[a_idx] <= 1'b1;
-                                dirty_w1[a_idx] <= latched_we;
+                                // clean line in; a STORE writes it as a hit after RELOOKUP
+                                state <= STATE_RELOOKUP;
                             end
-                            lru_bit[a_idx] <= ~latched_target_way;
-                            if (!latched_we)
-                                cpu_rdata <= a_offset[2] ? current_extracted_data[63:32] : current_extracted_data[31:0];
-                            cpu_ready <= 1'b1;
-                            state <= STATE_IDLE;
                         end
                     end
                 end
@@ -469,8 +617,9 @@ module DataCache #(
 
                 STATE_BYPASS_R: begin
                     if (m_axi_rvalid && m_axi_rready) begin
-                        cpu_rdata <= a_offset[2] ? m_axi_rdata[63:32] : m_axi_rdata[31:0];
-                        cpu_ready <= 1'b1;
+                        served <= 1'b1;
+                        served_rdata <= a_offset[2] ? m_axi_rdata[63:32] : m_axi_rdata[31:0];
+                        served_error <= m_axi_rresp[1] || !m_axi_rlast;
                         state <= STATE_IDLE;
                     end
                 end
@@ -492,7 +641,8 @@ module DataCache #(
 
                 STATE_BYPASS_B: begin
                     if (m_axi_bvalid) begin
-                        cpu_ready <= 1'b1;
+                        served <= 1'b1;
+                        served_error <= m_axi_bresp[1];
                         state <= STATE_IDLE;
                     end
                 end
@@ -507,14 +657,10 @@ module DataCache #(
                         wb_rd_cnt <= 3'd0;
                         state <= STATE_WB_READ;
                     end else begin
-                        if (scan_inval) begin
-                            if (scan_way) valid_w1[scan_set] <= 1'b0;
-                            else valid_w0[scan_set] <= 1'b0;
-                        end
+                        // INVAL clears valid through the per-set state write port
                         if (scan_last) begin
-                            if (scan_inval) inval_done <= 1'b1;
-                            else fence_i_done <= 1'b1;
-                            state <= STATE_SCAN_WAIT;
+                            scan_done_pending <= 1'b1;
+                            state <= STATE_RELOOKUP;
                         end else begin
                             if (scan_way) scan_set <= scan_set + 1'b1;
                             scan_way <= ~scan_way;
@@ -526,6 +672,7 @@ module DataCache #(
                     // done was a 1-cycle pulse; wait until the requester drops req
                     fence_i_done <= 1'b0;
                     inval_done <= 1'b0;
+                    scan_error <= 1'b0;
                     wb_from_scan <= 1'b0;
                     if (!fence_i_req && !inval_req) state <= STATE_IDLE;
                 end

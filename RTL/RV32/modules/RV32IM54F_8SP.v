@@ -19,6 +19,7 @@
 `include "./modules/Immediate_Generator.v"
 `include "./modules/Instruction_Decoder.v"
 `include "./modules/Instruction_Memory.v"
+`include "./modules/Instruction_Cache.v"
 `include "./modules/PC_Controller.v"
 `include "./modules/PC_Plus_4.v"
 `include "./modules/Program_Counter.v"
@@ -33,7 +34,9 @@
 `include "./modules/MEM_WB_Register.v"
 
 module RV32IM54F8SP #(
-    parameter XLEN = 32
+    parameter XLEN = 32,
+    parameter ICACHE_NUM_SETS = 512, // 2-way x 32B x 512 = 32KB
+    parameter ICACHE_EN = 1 // 0 : every DDR fetch bypasses the instruction cache
 )(
     input clk,
     input clk_enable,
@@ -53,8 +56,15 @@ module RV32IM54F8SP #(
     input wire data_cache_m_axi_rlast,
     input wire data_cache_m_axi_rvalid,
 
+    // Instruction Cache AXI4 master (read only)
+    input wire instruction_cache_m_axi_arready,
+    input wire [63:0] instruction_cache_m_axi_rdata,
+    input wire [1:0] instruction_cache_m_axi_rresp,
+    input wire instruction_cache_m_axi_rlast,
+    input wire instruction_cache_m_axi_rvalid,
+
      // IO Interface
-    
+
     output wire [31:0] retire_instruction,
     output wire [XLEN-1:0] MMIO_data_memory_write_data,
     output wire [XLEN-1:0] MMIO_data_memory_address,
@@ -76,8 +86,19 @@ module RV32IM54F8SP #(
     output wire [2:0] data_cache_m_axi_arsize,
     output wire [1:0] data_cache_m_axi_arburst,
     output wire data_cache_m_axi_arvalid,
-    output wire data_cache_m_axi_rready
+    output wire data_cache_m_axi_rready,
+
+    // Instruction Cache AXI4 master (read only)
+    output wire [31:0] instruction_cache_m_axi_araddr,
+    output wire [7:0] instruction_cache_m_axi_arlen,
+    output wire [2:0] instruction_cache_m_axi_arsize,
+    output wire [1:0] instruction_cache_m_axi_arburst,
+    output wire instruction_cache_m_axi_arvalid,
+    output wire instruction_cache_m_axi_rready
 );
+
+    // Data cache miss : stalls the pipeline through HazardUnit / ControlUnit (clk_enable is left for debug)
+    wire data_cache_cpu_busy;
 
     // Program Counter and PC Plus 4
     wire [XLEN-1:0] pc;
@@ -86,6 +107,15 @@ module RV32IM54F8SP #(
     
     // Instruction Memory and Debug Interface
     wire [31:0] im_instruction;
+    // Instruction cache miss : stalls the pipeline like a data cache miss
+    wire instruction_cache_cpu_busy;
+    // a miss in either cache holds IF ~ MEM and feeds a bubble into WB (HazardUnit / ControlUnit)
+    wire cache_stall = data_cache_cpu_busy || instruction_cache_cpu_busy;
+    // Pipeline registers also take the reset-flush edge while clk_enable is low in reset (the SoC
+    // holds it low then). Otherwise IF ~ WB start as X, and an X in EX2 reaches
+    // instruction_cache_fence_i_req -> cache_stall -> pc_stall and the core never starts.
+    wire pipeline_clk_enable = clk_enable || reset;
+    wire [31:0] rom_instruction;
     wire [31:0] dbg_instruction = 32'b00000001011110110000110000110011;
     reg [31:0] instruction;
     wire [XLEN-1:0] IF_imm;
@@ -165,6 +195,8 @@ module RV32IM54F8SP #(
     // Exception_Detector
     wire trapped;
     wire [3:0] trap_status;
+    wire exception_trapped; // ExceptionDetector output before the instruction cache miss gate
+    wire [3:0] exception_trap_status;
 
     // Trap Controller
     wire trap_done;
@@ -489,23 +521,17 @@ module RV32IM54F8SP #(
 
     // IO signals for MMIO Interface
     assign MMIO_data_memory_write_data = data_memory_write_data;
-    assign MMIO_data_memory_write_enable = MEM_memory_write;
+    // MMIO write side effects are combinational (kb_ack, clint_we, vram_we): an MMIO store
+    // held in MEM by an instruction cache miss fires once, after the miss
+    assign MMIO_data_memory_write_enable = MEM_memory_write && !instruction_cache_cpu_busy;
     assign MMIO_data_memory_address = MEM_alu_result;
 
     // DDR region (0x8000_0000 ~ 0x9FFF_FFFF) is served by the data cache
     wire mem_ddr_region = (MEM_alu_result[31:29] == 3'b100);
     wire data_memory_write_done;
 
-    localparam DATA_CACHE_IDLE = 2'd0; // no request in flight
-    localparam DATA_CACHE_WAIT = 2'd1; // request sent, waiting for cpu_ready
-    localparam DATA_CACHE_HOLD = 2'd2; // answered, MEM still stalled by something else (cpu_rdata is kept by the cache)
-    localparam DATA_CACHE_DRAIN = 2'd3; // MEM instruction was flushed, drop the answer
-
-    reg [1:0] data_cache_state;
-
-    wire data_cache_cpu_req_valid;
     wire [31:0] data_cache_cpu_rdata;
-    wire data_cache_cpu_ready;
+    wire data_cache_cpu_store_done;
 
     // MMIO Interface logics
     reg mmio_hit_reg;
@@ -665,6 +691,68 @@ module RV32IM54F8SP #(
                                  (IO_csr_address == 12'h344));
 
     // =========================================================================
+    // Instruction Cache (DDR region 0x8000_0000 ~ 0x9FFF_FFFF) + FENCE.I controller
+    // Same timing as the instruction memory : the array is read with the IF pc and the
+    // tag is compared in the next cycle, so a hit does not stall. A miss raises cpu_busy,
+    // which stalls the pipeline through cache_stall (HazardUnit / ControlUnit) until the line is in.
+    // Boot ROM fetches are not cached and come from the instruction memory.
+    // =========================================================================
+    wire [31:0] instruction_cache_cpu_rdata;
+    wire instruction_cache_fence_i_done;
+    wire instruction_cache_fence_i_req;
+    wire [31:0] instruction_cache_perf_access;
+    wire [31:0] instruction_cache_perf_miss;
+    wire [31:0] instruction_cache_perf_stall;
+    wire dm_write_pending;
+
+    // instruction_pc is the address of the fetch now at the memory / cache output
+    wire fetch_ddr_region = (instruction_pc[31:29] == 3'b100);
+
+    // No new miss while a trap sequence is running. The fetches that are checked then (MRET return
+    // states) are flushed by its pth_done_flush; a miss there would hold the PC through
+    // cache_stall while the sequence goes on, and the jump to mepc would be lost.
+    // A hit still returns the word; a miss returns a NOP without a refill.
+    wire trap_idle;
+
+    // IF takes a new pc at this edge (the cache reads the pc, same event as the IM fetch port)
+    wire instruction_cache_fetch_advance = clk_enable && !pc_stall;
+
+    assign im_instruction = fetch_ddr_region ? instruction_cache_cpu_rdata : rom_instruction;
+
+    // FENCE.I = "jump to pc+4 from EX2 after the instruction cache is invalidated".
+    // In EX2 every younger instruction is in EX..IF, the same set an EX2 jump flushes, so the
+    // existing jump flush / younger-trap masking / PC priority is reused unchanged.
+    // IDLE -(fi_trigger)-> WAIT -(fence_i_done)-> DONE -(redirect taken / left EX2)-> IDLE
+    // The legacy ID-stage TRAP_FENCEI path (1-cycle stall) is left untouched.
+    localparam [1:0] FI_IDLE = 2'd0, FI_WAIT = 2'd1, FI_DONE = 2'd2;
+    reg [1:0] fi_state;
+    wire EX2_is_fence_i = (EX2_opcode == `OPCODE_FENCE) && (EX2_funct3 == 3'b001);
+    // fi_trigger must depend on registered state only (no write_done / pc_stall / cache_stall):
+    // instruction_cache_fence_i_req feeds instruction_cache_cpu_busy -> cache_stall -> pc_stall.
+    // !dm_write_pending: an older store in MEM has completed its write before invalidation.
+    wire fi_trigger = (fi_state == FI_IDLE) && EX2_is_fence_i && !dm_write_pending && !reset;
+    assign instruction_cache_fence_i_req = fi_trigger || (fi_state == FI_WAIT);
+    wire fence_i_redirect = (fi_state == FI_DONE) && EX2_is_fence_i;
+
+    always @(posedge clk or posedge reset) begin
+        if (reset)
+            fi_state <= FI_IDLE;
+        else if (clk_enable) begin // runs while the pipeline is stalled
+            case (fi_state)
+                FI_IDLE: if (fi_trigger) fi_state <= FI_WAIT;
+                FI_WAIT: if (instruction_cache_fence_i_done) fi_state <= FI_DONE;
+                FI_DONE: if (!EX2_is_fence_i || !pc_stall) fi_state <= FI_IDLE;
+                default: fi_state <= FI_IDLE;
+            endcase
+        end
+    end
+
+    // Redirect seen by PC_Controller / Hazard_Unit / Exception_Detector only.
+    // trap_controller.jump, jump_target_latch and ex_ex2_register keep the real EX2_jump.
+    wire EX2_redirect = EX2_jump || fence_i_redirect;
+    wire [XLEN-1:0] EX2_redirect_target = fence_i_redirect ? EX2_pc_plus_4 : EX2_alu_result;
+
+    // =========================================================================
     // Module Instantiations
     // =========================================================================
 
@@ -745,6 +833,7 @@ module RV32IM54F8SP #(
 
     ControlUnit control_unit (
         .write_done(write_done),
+        .cache_stall(cache_stall), // data or instruction cache miss in progress
         .opcode(opcode),
         .funct3(funct3),
         .trap_done(trap_done),
@@ -802,16 +891,20 @@ module RV32IM54F8SP #(
         .rom_read_data(rom_read_data),
 
         .write_done(data_memory_write_done),
+        .write_pending(dm_write_pending),
         .read_data(data_memory_read_data)
     );
 
     // =========================================================================
     // Data Cache (DDR region 0x8000_0000 ~ 0x9FFF_FFFF)
-    // A load/store in MEM whose address is in the DDR region goes to the data
-    // cache instead of DataMemory. The request is sent once, and the whole
-    // pipeline is stalled through write_done until the cache answers.
+    // Same timing as DataMemory : the array is read with the EX2 address and the
+    // tag is compared in MEM, so a load hit does not stall and a store hit takes
+    // the usual 2-phase write_done. A miss raises cpu_busy, which stalls the
+    // pipeline registers (HazardUnit) and the PC (ControlUnit pc_stall) until the line is in.
     // =========================================================================
     wire data_cache_fence_i_done;
+    wire data_cache_cpu_error; // AXI error on this request (trap hookup : core group)
+    wire data_cache_scan_error;
     wire data_cache_inval_done;
     wire [31:0] data_cache_perf_access;
     wire [31:0] data_cache_perf_miss;
@@ -823,56 +916,23 @@ module RV32IM54F8SP #(
         (MEM_funct3[1:0] == 2'b01) ? MEM_alu_result[0] : 1'b0;
     wire data_cache_access = (MEM_memory_read || MEM_memory_write) && mem_ddr_region && !mem_misaligned;
 
-    // send once, only for an instruction that is not being flushed
-    assign data_cache_cpu_req_valid = (data_cache_state == DATA_CACHE_IDLE) && data_cache_access && !MEM_WB_flush;
+    // only for an instruction that is not being flushed
+    // no new miss while a trap sequence is running (the MEM instruction is flushed by it)
+    // (pth_done_flush, not MEM_WB_flush : MEM_WB_flush also carries the WB bubble of a cache stall)
+    wire data_cache_cpu_req_valid = data_cache_access && !pth_done_flush && trap_done;
 
-    wire data_cache_busy = data_cache_cpu_req_valid ||
-        ((data_cache_state == DATA_CACHE_WAIT) && !data_cache_cpu_ready) ||
-        ((data_cache_state == DATA_CACHE_DRAIN) && data_cache_access);
+    // MEM register takes a new instruction at this edge (the cache reads the EX2 address)
+    wire data_cache_mem_advance = clk_enable && (!EX_MEM_stall || EX_MEM_flush);
 
-    // stall the pipeline while DataMemory or the data cache is busy
-    assign write_done = data_memory_write_done && !data_cache_busy;
-
-    always @(posedge clk or posedge reset) begin
-        if (reset) begin
-            data_cache_state <= DATA_CACHE_IDLE;
-        end
-        else if (clk_enable) begin
-            case (data_cache_state)
-                DATA_CACHE_IDLE: begin
-                    if (data_cache_cpu_req_valid)
-                        data_cache_state <= DATA_CACHE_WAIT;
-                end
-                DATA_CACHE_WAIT: begin
-                    if (data_cache_cpu_ready) begin
-                        // answer is used this cycle; wait in HOLD if MEM cannot move yet
-                        if (!EX_MEM_stall || EX_MEM_flush || MEM_WB_flush)
-                            data_cache_state <= DATA_CACHE_IDLE;
-                        else
-                            data_cache_state <= DATA_CACHE_HOLD;
-                    end
-                    else if (!EX_MEM_stall || EX_MEM_flush || MEM_WB_flush) begin
-                        // MEM instruction left before the answer (trap flush or standby)
-                        data_cache_state <= DATA_CACHE_DRAIN;
-                    end
-                end
-                DATA_CACHE_HOLD: begin
-                    if (!EX_MEM_stall || EX_MEM_flush || MEM_WB_flush)
-                        data_cache_state <= DATA_CACHE_IDLE;
-                end
-                DATA_CACHE_DRAIN: begin
-                    if (data_cache_cpu_ready)
-                        data_cache_state <= DATA_CACHE_IDLE;
-                end
-                default: data_cache_state <= DATA_CACHE_IDLE;
-            endcase
-        end
-    end
+    // store hit uses the same 2-phase write_done as DataMemory; a miss stalls through cache_stall
+    assign write_done = data_memory_write_done && data_cache_cpu_store_done;
 
     DataCache data_cache (
         .clk(clk),
         .reset(reset),
         .clk_enable(clk_enable),
+        .mem_advance(data_cache_mem_advance),
+        .lookup_address(EX2_alu_result),
         .cpu_req_valid(data_cache_cpu_req_valid),
         .cpu_req_we(MEM_memory_write),
         .cpu_req_addr(MEM_alu_result),
@@ -891,9 +951,12 @@ module RV32IM54F8SP #(
         .m_axi_rlast(data_cache_m_axi_rlast),
         .m_axi_rvalid(data_cache_m_axi_rvalid),
         .cpu_rdata(data_cache_cpu_rdata),
-        .cpu_ready(data_cache_cpu_ready),
+        .cpu_busy(data_cache_cpu_busy),
+        .cpu_store_done(data_cache_cpu_store_done),
+        .cpu_error(data_cache_cpu_error),
         .fence_i_done(data_cache_fence_i_done),
         .inval_done(data_cache_inval_done),
+        .scan_error(data_cache_scan_error),
         .perf_access(data_cache_perf_access),
         .perf_miss(data_cache_perf_miss),
         .perf_wb(data_cache_perf_wb),
@@ -916,9 +979,11 @@ module RV32IM54F8SP #(
         .m_axi_rready(data_cache_m_axi_rready)
     );
 
+    // The trap output register is held during an instruction cache miss (see the gate below), so a
+    // trap still starts one pipeline step after it is detected, as without the cache
     ExceptionDetector exception_detector (
         .clk(clk),
-        .clk_enable(clk_enable),
+        .clk_enable(clk_enable && !instruction_cache_cpu_busy),
         .reset(reset),
         .ID_opcode(opcode),
         .ID_funct3(funct3),
@@ -936,7 +1001,7 @@ module RV32IM54F8SP #(
         .EX2_raw_imm(EX2_raw_imm[11:0]),
         .EXR_jump(EXR_jump),
         .EX_jump(EX_jump),
-        .EX2_jump(EX2_jump),
+        .EX2_jump(EX2_redirect),
         .csr_write_enable(cu_csr_write_enable),
         .alu_result(alu_result[1:0]),
         .EX2_alu_result(EX2_alu_result[1:0]),
@@ -944,13 +1009,21 @@ module RV32IM54F8SP #(
         .branch_target_lsbs(branch_target[1:0]),
         .branch_estimation(branch_estimation),
         .branch_prediction_miss(branch_prediction_miss),
-        .timer_interrupt(timer_interrupt_pending),
+        .timer_interrupt(timer_interrupt_pending && !cache_stall), // taken after a cache miss (level signal, not lost)
         .mstatus_mie(mstatus_mie),
         .mie_mtie(mie_mtie),
 
-        .trapped(trapped),
-        .trap_status(trap_status)
+        .trapped(exception_trapped),
+        .trap_status(exception_trap_status)
     );
+
+    // No new trap starts while an instruction cache miss is in progress: the trap would end with
+    // pth_done_flush while pc_stall (cache_stall) holds the PC, and the jump to mtvec / mepc would be
+    // lost. A trap registered on the edge the miss started is held and starts right after the miss.
+    // TrapController takes a new trap only in IDLE (later states use latched_trap_status).
+    // instruction_cache_cpu_busy does not depend on trap signals (no combinational loop).
+    assign trapped = exception_trapped && !instruction_cache_cpu_busy;
+    assign trap_status = instruction_cache_cpu_busy ? `TRAP_NONE : exception_trap_status;
 
     ForwardUnit forward_unit (
         .clk(clk),
@@ -1013,6 +1086,7 @@ module RV32IM54F8SP #(
         .mul_start(mul_start),
         .mul_busy(mul_busy),
         .write_done(write_done),
+        .cache_stall(cache_stall), // data or instruction cache miss in progress
         .trap_status(trap_status),
         .misaligned_instruction_flush(misaligned_instruction_flush),
         .misaligned_memory_flush(misaligned_memory_flush),
@@ -1062,7 +1136,7 @@ module RV32IM54F8SP #(
         .retire_register_write_enable(retire_register_write_enable),
         .retire_rd(retire_rd),
 
-        .EX2_jump(EX2_jump),
+        .EX2_jump(EX2_redirect),
         .branch_prediction_miss(branch_prediction_miss),
 
         // Forwarding hazards
@@ -1122,9 +1196,41 @@ module RV32IM54F8SP #(
         .pc_stall(pc_stall),
         .read_stall(EX_MEM_stall),
         .pc(pc),
-        .instruction(im_instruction),
+        .instruction(rom_instruction),
         .rom_address(EX2_alu_result),
         .rom_read_data(rom_read_data)
+    );
+
+    InstructionCache #(
+        .NUM_SETS(ICACHE_NUM_SETS),
+        .CACHE_EN(ICACHE_EN)
+    ) instruction_cache (
+        .clk(clk),
+        .reset(reset),
+        .clk_enable(clk_enable), // the cache keeps running while the pipeline is stalled
+        .fetch_advance(instruction_cache_fetch_advance),
+        .lookup_address(pc),
+        .cpu_req_valid(fetch_ddr_region && trap_idle),
+        .cpu_req_addr(instruction_pc),
+        .fence_i_req(instruction_cache_fence_i_req),
+        .perf_clear(1'b0),
+        .cpu_rdata(instruction_cache_cpu_rdata),
+        .cpu_busy(instruction_cache_cpu_busy),
+        .fence_i_done(instruction_cache_fence_i_done),
+        .perf_access(instruction_cache_perf_access),
+        .perf_miss(instruction_cache_perf_miss),
+        .perf_stall(instruction_cache_perf_stall),
+        .m_axi_arready(instruction_cache_m_axi_arready),
+        .m_axi_arvalid(instruction_cache_m_axi_arvalid),
+        .m_axi_araddr(instruction_cache_m_axi_araddr),
+        .m_axi_arlen(instruction_cache_m_axi_arlen),
+        .m_axi_arsize(instruction_cache_m_axi_arsize),
+        .m_axi_arburst(instruction_cache_m_axi_arburst),
+        .m_axi_rdata(instruction_cache_m_axi_rdata),
+        .m_axi_rresp(instruction_cache_m_axi_rresp),
+        .m_axi_rlast(instruction_cache_m_axi_rlast),
+        .m_axi_rvalid(instruction_cache_m_axi_rvalid),
+        .m_axi_rready(instruction_cache_m_axi_rready)
     );
 
     ProgramCounter program_counter (
@@ -1141,12 +1247,12 @@ module RV32IM54F8SP #(
     );
 
     PCController pc_controller (
-        .jump(EX2_jump),
+        .jump(EX2_redirect),
         .branch_estimation(branch_estimation),
         .branch_prediction_miss(branch_prediction_miss),
         .trapped(trapped || goto_mtvec),
         .pc(pc),
-        .jump_target(EX2_alu_result),
+        .jump_target(EX2_redirect_target),
         .branch_target(branch_target),
         .branch_target_actual(branch_target_actual),
         .trap_target(trap_target),
@@ -1201,7 +1307,8 @@ module RV32IM54F8SP #(
         .mret_executed(mret_executed),
         .pth_read(pth_read),
         .goto_mtvec(goto_mtvec),
-        .mret_done(mret_done)
+        .mret_done(mret_done),
+        .trap_idle(trap_idle)
     );
 
     // =========================================================================
@@ -1210,7 +1317,7 @@ module RV32IM54F8SP #(
 
     IF_IO_Register #(.XLEN(XLEN)) if_io_register (
         .clk(clk),
-        .clk_enable(clk_enable),
+        .clk_enable(pipeline_clk_enable),
         .flush(IF_IO_flush),
         .IF_IO_stall(IF_IO_stall),
         .branch_estimation(branch_estimation),
@@ -1236,7 +1343,7 @@ module RV32IM54F8SP #(
 
     IO_ID_Register #(.XLEN(XLEN)) io_id_register (
         .clk(clk),
-        .clk_enable(clk_enable),
+        .clk_enable(pipeline_clk_enable),
         .flush(IO_ID_flush),
         .IO_ID_stall(IO_ID_stall),
 
@@ -1256,7 +1363,7 @@ module RV32IM54F8SP #(
     // ID - EXR pipeline register (was ID_EX, outputs renamed to EXR_)
     ID_EX_Register #(.XLEN(XLEN)) id_exr_register (
         .clk(clk),
-        .clk_enable(clk_enable),
+        .clk_enable(pipeline_clk_enable),
         .flush(ID_EXR_flush),             // CHANGED
         .ID_EX_stall(ID_EXR_stall),      // CHANGED
         
@@ -1316,7 +1423,7 @@ module RV32IM54F8SP #(
     // EXR - EX pipeline register (NEW)
     EXR_EX_Register #(.XLEN(XLEN)) exr_ex_register (
         .clk(clk),
-        .clk_enable(clk_enable),
+        .clk_enable(pipeline_clk_enable),
         .flush(EXR_EX_flush),
         .EXR_EX_stall(EXR_EX_stall),
 
@@ -1380,7 +1487,7 @@ module RV32IM54F8SP #(
     // EX - EX2/BR pipeline register (inputs now from EXR_EX register outputs)
     EX_EX2_Register #(.XLEN(XLEN)) ex_ex2_register (
         .clk(clk),
-        .clk_enable(clk_enable),
+        .clk_enable(pipeline_clk_enable),
         .flush(EX_EX2_flush),
         .EX_EX2_stall(EX_EX2_stall),
 
@@ -1454,7 +1561,7 @@ module RV32IM54F8SP #(
 
     EX_MEM_Register #(.XLEN(XLEN)) ex_mem_register (
         .clk(clk),
-        .clk_enable(clk_enable),
+        .clk_enable(pipeline_clk_enable),
         .flush(EX_MEM_flush),
         .EX_MEM_stall(EX_MEM_stall),
 
@@ -1501,7 +1608,7 @@ module RV32IM54F8SP #(
 
     MEM_WB_Register #(.XLEN(XLEN)) mem_wb_register (
         .clk(clk),
-        .clk_enable(clk_enable),
+        .clk_enable(pipeline_clk_enable),
         .MEM_WB_stall(MEM_WB_stall),
         .flush(MEM_WB_flush),
 

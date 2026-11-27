@@ -11,7 +11,8 @@ module DataMemory #(
     input [XLEN-1:0] rom_read_data,
     output [XLEN-1:0] rom_address,
     output [XLEN-1:0] read_data,
-    output write_done
+    output write_done,
+    output write_pending          // RAM/ROM store in MEM whose write cycle has not happened yet (no clk_enable term)
 );
 
     // Byte-banked BRAM (8 banks × 8-bit × 8192 entries = 64KB)
@@ -33,6 +34,7 @@ module DataMemory #(
     
     wire do_ram_write = do_write && !write_phase && ram_access;
     assign write_done = !do_write || write_phase;
+    assign write_pending = write_enable && !write_phase;
 
     integer i;
     initial begin
